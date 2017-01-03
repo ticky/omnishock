@@ -5,6 +5,8 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let game_controller_subsystem = sdl_context.game_controller().unwrap();
 
+    // Load pre-set controller mappings (note that SDL will still read
+    // others from the SDL_GAMECONTROLLERCONFIG environment variable)
     let controller_mappings =
         include_str!("../vendor/SDL_GameControllerDB/gamecontrollerdb.txt")
             .lines()
@@ -18,8 +20,10 @@ fn main() {
         }
     }
 
+    // Keep track of the controllers we know of
     let mut active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
 
+    // Look into controllers that were already connected at start-up
     let joystick_count =
         match game_controller_subsystem.num_joysticks() {
             Ok(count) => count,
@@ -41,6 +45,7 @@ fn main() {
 
     println!("(There are {} controllers connected)", active_controllers.len());
 
+    // Listen to SDL events!
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
 
