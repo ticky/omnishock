@@ -20,6 +20,27 @@ fn main() {
 
     let mut active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
 
+    let joystick_count =
+        match game_controller_subsystem.num_joysticks() {
+            Ok(count) => count,
+            Err(error) => panic!("failed to enumerate joysticks: {}", error),
+        };
+
+    for id in 0..joystick_count {
+        if game_controller_subsystem.is_game_controller(id) {
+            match game_controller_subsystem.open(id) {
+                Ok(controller) => {
+                    let controller_id = &controller.instance_id();
+                    println!("{} (#{}): found", controller.name(), controller_id);
+                    active_controllers.insert(*controller_id, controller);
+                },
+                Err(error) => println!("could not initialise joystick {} as controller: {:?}", id, error),
+            }
+        }
+    }
+
+    println!("(There are {} controllers connected)", active_controllers.len());
+
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
 
@@ -27,11 +48,14 @@ fn main() {
             Event::ControllerDeviceAdded{ which, .. } => {
                 match game_controller_subsystem.open(which as u32) {
                     Ok(controller) => {
-                        println!("{} (#{}): connected", controller.name(), controller.instance_id());
-                        println!("(There are {} controllers connected)", active_controllers.len() + 1);
-                        active_controllers.insert(controller.instance_id(), controller);
+                        let controller_id = &controller.instance_id();
+                        if !active_controllers.contains_key(controller_id) {
+                            println!("{} (#{}): connected", controller.name(), controller_id);
+                            println!("(There are {} controllers connected)", active_controllers.len() + 1);
+                            active_controllers.insert(*controller_id, controller);
+                        }
                     },
-                    Err(error) => println!("could not initialise connected controller #{}: {:?}", which, error),
+                    Err(error) => println!("could not initialise connected joystick {}: {:?}", which, error),
                 }
             },
 
