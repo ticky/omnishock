@@ -7,3 +7,10 @@ rust:
 matrix:
   allow_failures:
     - rust: nightly
+install:
+  - wget https://www.libsdl.org/release/SDL2-2.0.5.tar.gz -O sdl2.tar.gz
+  - tar xzf sdl2.tar.gz
+  - pushd SDL2-* && ./configure && make && sudo make install && popd
+env:
+  global:
+  - LD_LIBRARY_PATH: "/usr/local/lib"
