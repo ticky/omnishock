@@ -1,0 +1,7 @@
+[package]
+name = "omnishock"
+version = "0.0.1"
+authors = [ "Jessica Stokes <hello@jessicastokes.net>" ]
+
+[dependencies]
+sdl2 = "0.27.2"
