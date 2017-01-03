@@ -4,10 +4,18 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let game_controller_subsystem = sdl_context.game_controller().unwrap();
 
-    match game_controller_subsystem.load_mappings("/Users/jessica/Repositories/SDL_GameControllerDB/gamecontrollerdb.txt") {
-        Err(error) => panic!("can't load mappings: {}", error),
-        _ => (),
-    };
+    let controller_mappings =
+        include_str!("../vendor/SDL_GameControllerDB/gamecontrollerdb.txt")
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty() && !line.starts_with('#'));
+
+    for mapping in controller_mappings {
+        match game_controller_subsystem.add_mapping(mapping) {
+            Err(error) => panic!("failed to load mapping: {}", error),
+            _ => (),
+        }
+    }
 
     // TODO: this should be a hashmap of instance_id to gamecontroller!
     let mut controllers: Vec<sdl2::controller::GameController> = Vec::new();
