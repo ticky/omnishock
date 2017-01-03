@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 extern crate sdl2;
 
 fn main() {
@@ -17,8 +18,7 @@ fn main() {
         }
     }
 
-    // TODO: this should be a hashmap of instance_id to gamecontroller!
-    let mut controllers: Vec<sdl2::controller::GameController> = Vec::new();
+    let mut active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
 
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
@@ -27,31 +27,34 @@ fn main() {
             Event::ControllerDeviceAdded{ which, .. } => {
                 match game_controller_subsystem.open(which as u32) {
                     Ok(controller) => {
-                        println!("{} connected as #{}! (joystick ID is {})", controller.name(), controller.instance_id(), which);
-                        controllers.push(controller);
+                        println!("{} (#{}): connected", controller.name(), controller.instance_id());
+                        println!("(There are {} controllers connected)", active_controllers.len() + 1);
+                        active_controllers.insert(controller.instance_id(), controller);
                     },
                     Err(error) => println!("could not initialise connected controller #{}: {:?}", which, error),
                 }
             },
 
             Event::ControllerAxisMotion{ which, axis, value, .. } => {
-                println!("Controller {} axis {:?} moved to {}", which, axis, value);
+                println!("{} (#{}): {:?}: {}", active_controllers[&which].name(), which, axis, value);
             },
 
             Event::ControllerButtonDown{ which, button, .. } => {
-                println!("Controller {} button {:?} down", which, button);
+                println!("{} (#{}): {:?}: down", active_controllers[&which].name(), which, button);
             },
 
             Event::ControllerButtonUp{ which, button, .. } => {
-                println!("Controller {} button {:?} up", which, button);
+                println!("{} (#{}): {:?}: up", active_controllers[&which].name(), which, button);
             },
 
             Event::ControllerDeviceRemoved{ which, .. } => {
-                println!("Controller {} disconnected!", which);
+                println!("{} (#{}): disconnected", active_controllers[&which].name(), which);
+                println!("(There are {} controllers connected)", active_controllers.len() - 1);
+                active_controllers.remove(&which);
             },
 
             Event::ControllerDeviceRemapped{ which, .. } => {
-                println!("Controller {} remapped!", which);
+                println!("{} (#{}) remapped!", active_controllers[&which].name(), which);
             },
 
             Event::Quit{..} => break,
