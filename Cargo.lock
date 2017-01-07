@@ -1,6 +1,6 @@
 [root]
 name = "omnishock"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "sdl2 0.27.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

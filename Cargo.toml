@@ -1,6 +1,6 @@
 [package]
 name = "omnishock"
-version = "0.0.1"
+version = "0.0.2"
 authors = [ "Jessica Stokes <hello@jessicastokes.net>" ]
 repository = "https://github.com/ticky/omnishock.git"
 homepage = "https://github.com/ticky/omnishock"
