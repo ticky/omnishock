@@ -5,7 +5,9 @@ const NAME: Option<&'static str> = option_env!("CARGO_PKG_NAME");
 const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 fn main() {
-    println!("{} v{}", NAME.unwrap_or("omnishock"), VERSION.unwrap_or("Custom"));
+    println!("{} v{}",
+             NAME.unwrap_or("omnishock"),
+             VERSION.unwrap_or("Custom"));
 
     let sdl_context = sdl2::init().unwrap();
     let game_controller_subsystem = sdl_context.game_controller().unwrap();
