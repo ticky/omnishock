@@ -19,6 +19,9 @@ fn main() {
         .map(|line| line.trim())
         .filter(|line| !line.is_empty() && !line.starts_with('#'));
 
+    // Load each mapping individually rather than using load_mappings,
+    // as it turns out doing them together can break without warning
+    // if the file's syntax is ever invalid
     for mapping in controller_mappings {
         match game_controller_subsystem.add_mapping(mapping) {
             Err(error) => panic!("failed to load mapping: {}", error),
