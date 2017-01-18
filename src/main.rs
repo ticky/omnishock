@@ -94,6 +94,14 @@ fn main() {
                          value);
             }
 
+            Event::JoyAxisMotion { which, axis_idx, value, .. } => {
+                println!("{} (#{}): a{:?}: {}",
+                         active_controllers[&which].name(),
+                         which,
+                         axis_idx,
+                         value);
+            }
+
             Event::ControllerButtonDown { which, button, .. } => {
                 println!("{} (#{}): {:?}: down",
                          active_controllers[&which].name(),
