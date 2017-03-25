@@ -1,16 +1,21 @@
 extern crate sdl2;
 #[macro_use]
 extern crate clap;
+use clap::AppSettings;
 use clap::SubCommand;
 use std::collections::HashMap;
 
 fn main() {
     let matches = app_from_crate!()
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("test") {
-        test();
+    match matches.subcommand_name() {
+        Some("test") => {
+            test();
+        }
+        _ => (),
     }
 }
 
