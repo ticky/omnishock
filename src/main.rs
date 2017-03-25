@@ -1,18 +1,25 @@
-use std::collections::HashMap;
 extern crate sdl2;
-
-const NAME: Option<&'static str> = option_env!("CARGO_PKG_NAME");
-const VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
-
-fn print_version() {
-    println!("{} v{}",
-             NAME.unwrap_or("omnishock"),
-             VERSION.unwrap_or("Custom"));
-}
+#[macro_use]
+extern crate clap;
+use clap::AppSettings;
+use clap::SubCommand;
+use std::collections::HashMap;
 
 fn main() {
-    print_version();
+    let matches = app_from_crate!()
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
+        .get_matches();
 
+    match matches.subcommand_name() {
+        Some("test") => {
+            test();
+        }
+        _ => (),
+    }
+}
+
+fn test() {
     let sdl_context = sdl2::init().unwrap();
     let game_controller_subsystem = sdl_context.game_controller().unwrap();
 
