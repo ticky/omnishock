@@ -8,6 +8,8 @@ use std::io;
 use std::io::prelude::*;
 use serial::prelude::*;
 
+static DUALSHOCK_MAGIC: u8 = 0x5A;
+
 fn main() {
     let matches = app_from_crate!()
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -90,6 +92,67 @@ fn main() {
     }
 }
 
+// Misty gave me a special license exception for this stanza I swear
+fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
+    if !bytes.len() == 8 {
+        return Err(format!("Input must be 8 bytes long ({} elements provided)", bytes.len()));
+    }
+    let mut result = 0;
+    for (i, byte) in bytes.iter().enumerate() {
+        let mask = (1 as u8) << i;
+
+        // Are we setting this bit to 0 or 1?
+        // Values are expected to be 0 or greater.
+        if *byte == 0 {
+            result |= mask;
+        } else {
+            result &= !mask;
+        }
+    }
+    return Ok(result);
+}
+
+fn controller_button_to_bit(button: bool) -> u8 {
+    return match button {
+        True => 0,
+        False => 1
+    }
+}
+
+fn controller_map_for_ps2_controller_emulator(controller: sdl2::controller::GameController) -> Vec<u8> {
+    let buttons1 = vec!(
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadLeft)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadDown)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadRight)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadUp)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::Start)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::RightStick)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::LeftStick)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::Back))
+    );
+
+    let buttons2 = vec!(
+        controller_button_to_bit(controller.button(sdl2::controller::Button::LeftShoulder)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::RightShoulder)),
+        controller.axis(sdl2::controller::Axis::TriggerLeft),
+        controller.axis(sdl2::controller::Axis::TriggerRight),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::Y)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::B)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::A)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::X))
+    );
+
+    return vec!(
+        DUALSHOCK_MAGIC,
+        collapse_bits(&buttons1).unwrap(),
+        collapse_bits(&buttons2).unwrap(),
+        controller.axis(sdl2::controller::Axis::RightX),
+        controller.axis(sdl2::controller::Axis::RightY),
+        controller.axis(sdl2::controller::Axis::LeftX),
+        controller.axis(sdl2::controller::Axis::LeftY)
+    );
+}
+
 fn send_to_ps2_controller_emulator(device_path: &str,
                                    sdl_context: sdl2::Sdl,
                                    game_controller_subsystem: sdl2::GameControllerSubsystem,
@@ -109,37 +172,120 @@ fn send_to_ps2_controller_emulator(device_path: &str,
 
     println!("Connected!");
 
-    let buf = vec!(
-        0x5A, // DualShock Magic
+    for event in sdl_context.event_pump().unwrap().wait_iter() {
+        use sdl2::event::Event;
 
-        // Buttons (0=Pressed)
-        //┌─────────── Left
-        //│┌────────── Down
-        //││┌───────── Right
-        //│││┌──────── Up
-        //││││┌─────── [Start>
-        //│││││┌────── (R3)
-        //││││││┌───── (L3)
-        //│││││││┌──── [Select]
-        0b11111111u8,
-        0b11111111u8,
-        //│││││││└──── [L2]
-        //││││││└───── [R2]
-        //│││││└────── [L1]
-        //││││└─────── [R1]
-        //│││└──────── Triangle
-        //││└───────── Circle
-        //│└────────── Cross
-        //└─────────── Square
+        match event {
+            Event::ControllerDeviceAdded { which, .. } => {
+                match game_controller_subsystem.open(which as u32) {
+                    Ok(controller) => {
+                        let controller_id = &controller.instance_id();
+                        if !active_controllers.contains_key(controller_id) {
+                            println!("{} (#{}): connected", controller.name(), controller_id);
+                            println!("(There are {} controllers connected)",
+                                     active_controllers.len() + 1);
+                            active_controllers.insert(*controller_id, controller);
+                        }
+                    }
+                    Err(error) => {
+                        println!("could not initialise connected joystick {}: {:?}",
+                                 which,
+                                 error)
+                    }
+                }
+            }
 
-        // Sticks
-        0x80, // Right stick X
-        0x80, // Right stick Y
-        0x80, // Left stick X
-        0x80, // Left stick Y
-    );
+            Event::ControllerDeviceRemoved { which, .. } => {
+                println!("{} (#{}): disconnected",
+                         active_controllers[&which].name(),
+                         which);
+                println!("(There are {} controllers connected)",
+                         active_controllers.len() - 1);
+                active_controllers.remove(&which);
+            }
 
-    try!(serial.write(&buf[..]));
+            Event::ControllerAxisMotion { which, axis, value, .. } => {
+                if which != 1{
+                    continue
+                }
+
+                // println!("{} (#{}): {:?}: {}",
+                //          active_controllers[&which].name(),
+                //          which,
+                //          axis,
+                //          value);
+
+                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
+
+                try!(serial.write(&state));
+            }
+
+            Event::ControllerButtonDown { which, button, .. } => {
+                if which != 1{
+                    continue
+                }
+
+                // println!("{} (#{}): {:?}: down",
+                //          active_controllers[&which].name(),
+                //          which,
+                //          button);
+
+                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
+
+                try!(serial.write(&state));
+            }
+
+            Event::ControllerButtonUp { which, button, .. } => {
+                if which != 1{
+                    continue
+                }
+
+                // println!("{} (#{}): {:?}: up",
+                //          active_controllers[&which].name(),
+                //          which,
+                //          button);
+
+                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
+
+                try!(serial.write(&state));
+            }
+
+            Event::Quit { .. } => break,
+            _ => (),
+        }
+    }
+
+    // let buf = vec!(
+    //     DUALSHOCK_MAGIC,
+
+    //     // Buttons (0=Pressed)
+    //     //┌─────────── Left
+    //     //│┌────────── Down
+    //     //││┌───────── Right
+    //     //│││┌──────── Up
+    //     //││││┌─────── [Start>
+    //     //│││││┌────── (R3)
+    //     //││││││┌───── (L3)
+    //     //│││││││┌──── [Select]
+    //     0b11111111u8,
+    //     0b11111111u8,
+    //     //│││││││└──── [L2]
+    //     //││││││└───── [R2]
+    //     //│││││└────── [L1]
+    //     //││││└─────── [R1]
+    //     //│││└──────── Triangle
+    //     //││└───────── Circle
+    //     //│└────────── Cross
+    //     //└─────────── Square
+
+    //     // Sticks
+    //     0x80, // Right stick X
+    //     0x80, // Right stick Y
+    //     0x80, // Left stick X
+    //     0x80, // Left stick Y
+    // );
+
+    // try!(serial.write(&buf[..]));
 
     Ok(())
 }
