@@ -1,13 +1,23 @@
 extern crate sdl2;
+extern crate serial;
 #[macro_use]
 extern crate clap;
-use clap::AppSettings;
-use clap::SubCommand;
+use clap::{Arg, AppSettings, SubCommand};
 use std::collections::HashMap;
+use std::io;
+use std::io::prelude::*;
+use serial::prelude::*;
 
 fn main() {
     let matches = app_from_crate!()
         .setting(AppSettings::SubcommandRequiredElseHelp)
+        .subcommand(SubCommand::with_name("ps2ce")
+            .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
+            .arg(Arg::with_name("device")
+                .index(1)
+                .takes_value(true)
+                .required(true)
+                .help("USB Serial device to use to communcate.\nUsually /dev/cu.usbmodem12341 on macOS.")))
         .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
@@ -15,8 +25,65 @@ fn main() {
         Some("test") => {
             test();
         }
+        Some("ps2ce") => {
+            let ps2ce_matches = matches.subcommand_matches("ps2ce").unwrap();
+            let device_path = ps2ce_matches.value_of("device").unwrap();
+            ps2ce(&device_path).unwrap();
+        }
         _ => (),
     }
+}
+
+fn ps2ce(device_path: &str) -> io::Result<()> {
+    println!("Connecting to PS2 Controller Emulator device at '{}'...", device_path);
+
+    let mut serial = match serial::open(device_path) {
+        Ok(serial) => serial,
+        Err(error) => panic!("failed to open serial device: {}", error)
+    };
+
+    try!(serial.reconfigure(&|settings| {
+        try!(settings.set_baud_rate(serial::Baud9600));
+        settings.set_char_size(serial::Bits8);
+        Ok(())
+    }));
+
+    println!("Connected!");
+    println!("Sending a command!");
+
+    let buf = vec!(
+        0x5A, // DualShock Magic
+
+        // Buttons (0=Pressed)
+        //┌─────────── Left
+        //│┌────────── Down
+        //││┌───────── Right
+        //│││┌──────── Up
+        //││││┌─────── [Start>
+        //│││││┌────── (R3)
+        //││││││┌───── (L3)
+        //│││││││┌──── [Select]
+        0b11111111u8,
+        0b11111111u8,
+        //│││││││└──── [L2]
+        //││││││└───── [R2]
+        //│││││└────── [L1]
+        //││││└─────── [R1]
+        //│││└──────── Triangle
+        //││└───────── Circle
+        //│└────────── Cross
+        //└─────────── Square
+
+        // Sticks
+        0x80, // Right stick X
+        0x80, // Right stick Y
+        0x80, // Left stick X
+        0x80, // Left stick Y
+    );
+
+    try!(serial.write(&buf[..]));
+
+    Ok(())
 }
 
 fn test() {

@@ -11,3 +11,4 @@ readme = "README.md"
 [dependencies]
 clap = "2.20.0"
 sdl2 = "0.27.2"
+serial = "0.4"
