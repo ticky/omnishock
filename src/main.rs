@@ -2,7 +2,6 @@ extern crate sdl2;
 extern crate serial;
 #[macro_use]
 extern crate clap;
-use clap::{Arg, AppSettings, SubCommand};
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
@@ -10,17 +9,27 @@ use serial::prelude::*;
 
 static DUALSHOCK_MAGIC: u8 = 0x5A;
 
+enum ControllerEmulatorPacketType {
+    None,       // Fallback, just log messages
+    SevenByte,  // For Johnny Chung Lee's firmware
+    TwentyByte, // For pelvicthrustman's firmware
+}
+
 fn main() {
-    let matches = app_from_crate!()
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(SubCommand::with_name("ps2ce")
+    let global_arguments = app_from_crate!()
+        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        .arg(clap::Arg::with_name("verbose")
+            .long("verbose")
+            .short("v")
+            .help("Print more information about activity"))
+        .subcommand(clap::SubCommand::with_name("ps2ce")
             .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
-            .arg(Arg::with_name("device")
+            .arg(clap::Arg::with_name("device")
                 .index(1)
                 .takes_value(true)
                 .required(true)
                 .help("USB Serial device to use to communcate.\nUsually /dev/cu.usbmodem12341 on macOS.")))
-        .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
+        .subcommand(clap::SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
     // Initialise SDL2, and the game controller subsystem
@@ -73,12 +82,14 @@ fn main() {
     println!("(There are {} controllers connected)",
              active_controllers.len());
 
-    match matches.subcommand_name() {
-        Some("ps2ce") => {
-            let ps2ce_matches = matches.subcommand_matches("ps2ce").unwrap();
-            let device_path = ps2ce_matches.value_of("device").unwrap();
+    let subcommand_name = global_arguments.subcommand_name();
 
-            send_to_ps2_controller_emulator(&device_path,
+    match subcommand_name {
+        Some("ps2ce") => {
+            let command_arguments = global_arguments.subcommand_matches("ps2ce").unwrap();
+
+            send_to_ps2_controller_emulator(&global_arguments,
+                                            command_arguments,
                                             sdl_context,
                                             game_controller_subsystem,
                                             &mut active_controllers).unwrap();
@@ -156,11 +167,17 @@ fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::Gam
     );
 }
 
-fn send_to_ps2_controller_emulator(device_path: &str,
+fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
+                                   command_arguments: &clap::ArgMatches,
                                    sdl_context: sdl2::Sdl,
                                    game_controller_subsystem: sdl2::GameControllerSubsystem,
                                    active_controllers: &mut HashMap<i32, sdl2::controller::GameController>) -> io::Result<()> {
-    println!("Connecting to PS2 Controller Emulator device at '{}'...", device_path);
+    let verbose = global_arguments.is_present("verbose");
+    let device_path = command_arguments.value_of("device").unwrap();
+
+    if verbose {
+        println!("Connecting to PS2 Controller Emulator device at '{}'...", device_path);
+    }
 
     let mut serial = match serial::open(device_path) {
         Ok(serial) => serial,
@@ -173,7 +190,39 @@ fn send_to_ps2_controller_emulator(device_path: &str,
         Ok(())
     })?;
 
-    println!("Connected!");
+    let mut communication_mode = ControllerEmulatorPacketType::None;
+
+    if verbose {
+        println!("Connected! Determining device type...");
+    }
+
+    // Create a four-byte response buffer
+    let mut response = vec![0; 4];
+
+    // Send one space character (this won't do anything on either type)
+    serial.write(&vec!(0x20))?;
+
+    // Check the response!
+    match serial.read(&mut response) {
+        Ok(read) => {
+            if read == 0 {
+                communication_mode = ControllerEmulatorPacketType::TwentyByte;
+                if verbose {
+                    println!("No response. I suspect this is pelvicthrustman's work!");
+                }
+            } if response[0] == ('x' as u8) {
+                communication_mode = ControllerEmulatorPacketType::SevenByte;
+                if verbose {
+                    println!("We got an 'x' back - this is probably Johnny Chung Lee's work!");
+                }
+            } else {
+                println!("Unrecognised response: {:?}", response);
+            }
+        },
+        Err(error) => {
+            println!("failed reading from device '{}': {}", device_path, error);
+        }
+    };
 
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
@@ -212,11 +261,33 @@ fn send_to_ps2_controller_emulator(device_path: &str,
                     continue
                 }
 
-                let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+                let sent;
 
-                println!("{:?}", state);
+                match communication_mode {
+                    ControllerEmulatorPacketType::None => {
+                        sent = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+                    }
 
-                serial.write_all(&state)?;
+                    ControllerEmulatorPacketType::SevenByte => {
+                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+
+                        serial.write_all(&state)?;
+
+                        sent = state;
+                    }
+
+                    ControllerEmulatorPacketType::TwentyByte => {
+                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+
+                        serial.write_all(&state)?;
+
+                        sent = state;
+                    }
+                };
+
+                if verbose {
+                    println!("Sent: {:?}", sent);
+                }
             }
 
             Event::Quit { .. } => break,
