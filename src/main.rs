@@ -123,8 +123,7 @@ fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
         let mask = (1 as u8) << i;
 
         // Are we setting this bit to 0 or 1?
-        // Values are expected to be 0 or greater.
-        if *byte == 0 {
+        if *byte <= 0x80 {
             result |= mask;
         } else {
             result &= !mask;
@@ -133,11 +132,21 @@ fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
     return Ok(result);
 }
 
-fn controller_button_to_bit(button: bool) -> u8 {
+fn button_clamp(button: bool) -> u8 {
     return match button {
-        true => 1,
-        false => 0
+        true => 0xFF,
+        false => 0x00
     }
+}
+
+// Corner point for DualShock2: 0.835, Xbox One: 0.764
+
+fn convert_axis(number: i16) -> u8 {
+    return ((number >> 8) + 0x80) as u8;
+}
+
+fn convert_half_axis(number: i16) -> u8 {
+    return ((number >> 8) * 2) as u8;
 }
 
 fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::GameController,
@@ -146,58 +155,74 @@ fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::Gam
     let raw_right_trigger = controller.axis(sdl2::controller::Axis::TriggerRight);
     let raw_right_stick_y = controller.axis(sdl2::controller::Axis::RightY);
 
+    // buttons1
+    let select_value = button_clamp(controller.button(sdl2::controller::Button::Back));
+    let left_stick_value = button_clamp(controller.button(sdl2::controller::Button::LeftStick));
+    let right_stick_value = button_clamp(controller.button(sdl2::controller::Button::RightStick));
+    let start_value = button_clamp(controller.button(sdl2::controller::Button::Start));
+    let dpad_up_value = button_clamp(controller.button(sdl2::controller::Button::DPadUp));
+    let dpad_right_value = button_clamp(controller.button(sdl2::controller::Button::DPadRight));
+    let dpad_down_value = button_clamp(controller.button(sdl2::controller::Button::DPadDown));
+    let dpad_left_value = button_clamp(controller.button(sdl2::controller::Button::DPadLeft));
+
+    // buttons2
     let l2_button_value;
     let r2_button_value;
-    let right_stick_value;
+    let l1_button_value = button_clamp(controller.button(sdl2::controller::Button::LeftShoulder));
+    let r1_button_value = button_clamp(controller.button(sdl2::controller::Button::RightShoulder));
+    let triangle_value = button_clamp(controller.button(sdl2::controller::Button::Y));
+    let circle_value = button_clamp(controller.button(sdl2::controller::Button::B));
+    let cross_value;
+    let square_value;
 
-    println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
+    let right_stick_x_value = convert_axis(controller.axis(sdl2::controller::Axis::RightX)/*.saturating_mul(1.1)*/);
+    let right_stick_y_value;
+    let left_stick_x_value = convert_axis(controller.axis(sdl2::controller::Axis::LeftX)/*.saturating_mul(1.1)*/);
+    let left_stick_y_value = convert_axis(controller.axis(sdl2::controller::Axis::LeftY)/*.saturating_mul(1.1)*/);
+
+    // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
 
     match trigger_mode {
         "right-stick" => {
             // TODO: This is wrong and crashes sometimes
-            l2_button_value = ((i16::max_value() - raw_right_stick_y) >> 7) as u8;
-            r2_button_value = (raw_right_stick_y >> 7) as u8;
-            right_stick_value = (((raw_left_trigger - raw_right_trigger) >> 8) + 0x80) as u8;
+            l2_button_value = button_clamp(controller.button(sdl2::controller::Button::X));
+            r2_button_value = button_clamp(controller.button(sdl2::controller::Button::A));
+
+            // println!("L2: {} ({:x})", l2_button_value, l2_button_value);
+            // println!("R2: {} ({:x})", r2_button_value, r2_button_value);
+
+            cross_value = convert_half_axis(-1 - raw_right_stick_y);
+            square_value = convert_half_axis(raw_right_stick_y);
+
+            right_stick_y_value = convert_axis(raw_left_trigger - raw_right_trigger);
         }
         _ => {
             // These trigger axes use 0i16...i16::max_value(),
             // not i16::min_value()..i16::max_value()
             l2_button_value = (raw_left_trigger as u16 >> 7) as u8;
             r2_button_value = (raw_right_trigger as u16 >> 7) as u8;
-            right_stick_value = ((raw_right_stick_y >> 8) + 0x80) as u8;
+
+            cross_value = button_clamp(controller.button(sdl2::controller::Button::A));
+            square_value = button_clamp(controller.button(sdl2::controller::Button::X));
+
+            right_stick_y_value = convert_axis(raw_right_stick_y/*.saturating_mul(1.1)*/);
         }
     }
 
-    let buttons1 = vec!(
-        controller_button_to_bit(controller.button(sdl2::controller::Button::Back)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::LeftStick)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::RightStick)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::Start)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadUp)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadRight)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadDown)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadLeft))
-    );
+    let buttons1 = vec!(select_value, left_stick_value, right_stick_value, start_value,
+                        dpad_up_value, dpad_right_value, dpad_down_value, dpad_left_value);
 
-    let buttons2 = vec!(
-        l2_button_value,
-        r2_button_value,
-        controller_button_to_bit(controller.button(sdl2::controller::Button::LeftShoulder)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::RightShoulder)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::Y)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::B)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::A)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::X))
-    );
+    let buttons2 = vec!(l2_button_value, r2_button_value, l1_button_value, r1_button_value,
+                        triangle_value, circle_value, cross_value, square_value);
 
     return vec!(
         DUALSHOCK_MAGIC,
         collapse_bits(&buttons1).unwrap(),
         collapse_bits(&buttons2).unwrap(),
-        ((controller.axis(sdl2::controller::Axis::RightX) >> 8) + 0x80) as u8,
-        right_stick_value,
-        ((controller.axis(sdl2::controller::Axis::LeftX) >> 8) + 0x80) as u8,
-        ((controller.axis(sdl2::controller::Axis::LeftY) >> 8) + 0x80) as u8
+        right_stick_x_value,
+        right_stick_y_value,
+        left_stick_x_value,
+        left_stick_y_value
     );
 }
 
