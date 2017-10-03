@@ -92,7 +92,8 @@ fn main() {
     }
 }
 
-// Misty gave me a special license exception for this stanza I swear
+// Misty gave me a special license exception for this stanza
+// <https://twitter.com/mistydemeo/status/914745750369714176>
 fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
     if !bytes.len() == 8 {
         return Err(format!("Input must be 8 bytes long ({} elements provided)", bytes.len()));
@@ -114,28 +115,30 @@ fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
 
 fn controller_button_to_bit(button: bool) -> u8 {
     return match button {
-        True => 0,
-        False => 1
+        true => 1,
+        false => 0
     }
 }
 
-fn controller_map_for_ps2_controller_emulator(controller: sdl2::controller::GameController) -> Vec<u8> {
+fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::GameController) -> Vec<u8> {
     let buttons1 = vec!(
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadLeft)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadDown)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadRight)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadUp)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::Start)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::RightStick)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::Back)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::LeftStick)),
-        controller_button_to_bit(controller.button(sdl2::controller::Button::Back))
+        controller_button_to_bit(controller.button(sdl2::controller::Button::RightStick)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::Start)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadUp)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadRight)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadDown)),
+        controller_button_to_bit(controller.button(sdl2::controller::Button::DPadLeft))
     );
 
     let buttons2 = vec!(
+        // These trigger axes use 0i16...i16::max_value(),
+        // not i16::min_value()..i16::max_value()
+        (controller.axis(sdl2::controller::Axis::TriggerLeft) as u16 >> 7) as u8,
+        (controller.axis(sdl2::controller::Axis::TriggerRight) as u16 >> 7) as u8,
         controller_button_to_bit(controller.button(sdl2::controller::Button::LeftShoulder)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::RightShoulder)),
-        controller.axis(sdl2::controller::Axis::TriggerLeft),
-        controller.axis(sdl2::controller::Axis::TriggerRight),
         controller_button_to_bit(controller.button(sdl2::controller::Button::Y)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::B)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::A)),
@@ -146,10 +149,10 @@ fn controller_map_for_ps2_controller_emulator(controller: sdl2::controller::Game
         DUALSHOCK_MAGIC,
         collapse_bits(&buttons1).unwrap(),
         collapse_bits(&buttons2).unwrap(),
-        controller.axis(sdl2::controller::Axis::RightX),
-        controller.axis(sdl2::controller::Axis::RightY),
-        controller.axis(sdl2::controller::Axis::LeftX),
-        controller.axis(sdl2::controller::Axis::LeftY)
+        ((controller.axis(sdl2::controller::Axis::RightX) >> 8) + 0x80) as u8,
+        ((controller.axis(sdl2::controller::Axis::RightY) >> 8) + 0x80) as u8,
+        ((controller.axis(sdl2::controller::Axis::LeftX) >> 8) + 0x80) as u8,
+        ((controller.axis(sdl2::controller::Axis::LeftY) >> 8) + 0x80) as u8
     );
 }
 
@@ -164,11 +167,11 @@ fn send_to_ps2_controller_emulator(device_path: &str,
         Err(error) => panic!("failed to open serial device: {}", error)
     };
 
-    try!(serial.reconfigure(&|settings| {
-        try!(settings.set_baud_rate(serial::Baud9600));
+    serial.reconfigure(&|settings| {
+        settings.set_baud_rate(serial::Baud9600)?;
         settings.set_char_size(serial::Bits8);
         Ok(())
-    }));
+    })?;
 
     println!("Connected!");
 
@@ -204,50 +207,16 @@ fn send_to_ps2_controller_emulator(device_path: &str,
                 active_controllers.remove(&which);
             }
 
-            Event::ControllerAxisMotion { which, axis, value, .. } => {
-                if which != 1{
+            Event::ControllerAxisMotion { which, .. } | Event::ControllerButtonDown { which, .. } | Event::ControllerButtonUp { which, .. } => {
+                if which != 0 {
                     continue
                 }
 
-                // println!("{} (#{}): {:?}: {}",
-                //          active_controllers[&which].name(),
-                //          which,
-                //          axis,
-                //          value);
+                let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
 
-                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
+                println!("{:?}", state);
 
-                try!(serial.write(&state));
-            }
-
-            Event::ControllerButtonDown { which, button, .. } => {
-                if which != 1{
-                    continue
-                }
-
-                // println!("{} (#{}): {:?}: down",
-                //          active_controllers[&which].name(),
-                //          which,
-                //          button);
-
-                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
-
-                try!(serial.write(&state));
-            }
-
-            Event::ControllerButtonUp { which, button, .. } => {
-                if which != 1{
-                    continue
-                }
-
-                // println!("{} (#{}): {:?}: up",
-                //          active_controllers[&which].name(),
-                //          which,
-                //          button);
-
-                let state = controller_map_for_ps2_controller_emulator(active_controllers[&which]);
-
-                try!(serial.write(&state));
+                serial.write_all(&state)?;
             }
 
             Event::Quit { .. } => break,
@@ -285,7 +254,7 @@ fn send_to_ps2_controller_emulator(device_path: &str,
     //     0x80, // Left stick Y
     // );
 
-    // try!(serial.write(&buf[..]));
+    // serial.write(&buf[..])?;
 
     Ok(())
 }
