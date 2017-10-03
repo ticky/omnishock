@@ -28,7 +28,16 @@ fn main() {
                 .index(1)
                 .takes_value(true)
                 .required(true)
-                .help("USB Serial device to use to communcate.\nUsually /dev/cu.usbmodem12341 on macOS.")))
+                .help("Device to use to communcate.\nUsually /dev/cu.usbmodem12341 for USB Serial on macOS."))
+            .arg(clap::Arg::with_name("trigger-mode")
+                .long("trigger-mode")
+                .short("t")
+                .takes_value(true)
+                .help("How to map the analog triggers")
+                .default_value("normal")
+                .possible_value("normal")
+                .possible_value("right-stick")
+                /*.possible_value("cross-and-square")*/))
         .subcommand(clap::SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
@@ -131,7 +140,34 @@ fn controller_button_to_bit(button: bool) -> u8 {
     }
 }
 
-fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::GameController) -> Vec<u8> {
+fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::GameController,
+                                              trigger_mode: &str) -> Vec<u8> {
+    let raw_left_trigger = controller.axis(sdl2::controller::Axis::TriggerLeft);
+    let raw_right_trigger = controller.axis(sdl2::controller::Axis::TriggerRight);
+    let raw_right_stick_y = controller.axis(sdl2::controller::Axis::RightY);
+
+    let l2_button_value;
+    let r2_button_value;
+    let right_stick_value;
+
+    println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
+
+    match trigger_mode {
+        "right-stick" => {
+            // TODO: This is wrong and crashes sometimes
+            l2_button_value = ((i16::max_value() - raw_right_stick_y) >> 7) as u8;
+            r2_button_value = (raw_right_stick_y >> 7) as u8;
+            right_stick_value = (((raw_left_trigger - raw_right_trigger) >> 8) + 0x80) as u8;
+        }
+        _ => {
+            // These trigger axes use 0i16...i16::max_value(),
+            // not i16::min_value()..i16::max_value()
+            l2_button_value = (raw_left_trigger as u16 >> 7) as u8;
+            r2_button_value = (raw_right_trigger as u16 >> 7) as u8;
+            right_stick_value = ((raw_right_stick_y >> 8) + 0x80) as u8;
+        }
+    }
+
     let buttons1 = vec!(
         controller_button_to_bit(controller.button(sdl2::controller::Button::Back)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::LeftStick)),
@@ -144,10 +180,8 @@ fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::Gam
     );
 
     let buttons2 = vec!(
-        // These trigger axes use 0i16...i16::max_value(),
-        // not i16::min_value()..i16::max_value()
-        (controller.axis(sdl2::controller::Axis::TriggerLeft) as u16 >> 7) as u8,
-        (controller.axis(sdl2::controller::Axis::TriggerRight) as u16 >> 7) as u8,
+        l2_button_value,
+        r2_button_value,
         controller_button_to_bit(controller.button(sdl2::controller::Button::LeftShoulder)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::RightShoulder)),
         controller_button_to_bit(controller.button(sdl2::controller::Button::Y)),
@@ -161,7 +195,7 @@ fn controller_map_for_ps2_controller_emulator(controller: &sdl2::controller::Gam
         collapse_bits(&buttons1).unwrap(),
         collapse_bits(&buttons2).unwrap(),
         ((controller.axis(sdl2::controller::Axis::RightX) >> 8) + 0x80) as u8,
-        ((controller.axis(sdl2::controller::Axis::RightY) >> 8) + 0x80) as u8,
+        right_stick_value,
         ((controller.axis(sdl2::controller::Axis::LeftX) >> 8) + 0x80) as u8,
         ((controller.axis(sdl2::controller::Axis::LeftY) >> 8) + 0x80) as u8
     );
@@ -224,6 +258,12 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
         }
     };
 
+    let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
+
+    if verbose {
+        println!("Using trigger mode '{}'...", trigger_mode);
+    }
+
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
 
@@ -265,11 +305,11 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
 
                 match communication_mode {
                     ControllerEmulatorPacketType::None => {
-                        sent = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+                        sent = controller_map_for_ps2_controller_emulator(&active_controllers[&which], trigger_mode);
                     }
 
                     ControllerEmulatorPacketType::SevenByte => {
-                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which], trigger_mode);
 
                         serial.write_all(&state)?;
 
@@ -277,7 +317,7 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
                     }
 
                     ControllerEmulatorPacketType::TwentyByte => {
-                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which]);
+                        let state = controller_map_for_ps2_controller_emulator(&active_controllers[&which], trigger_mode);
 
                         serial.write_all(&state)?;
 
