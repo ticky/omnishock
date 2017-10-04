@@ -12,7 +12,7 @@ static DUALSHOCK_MAGIC: u8 = 0x5A;
 enum ControllerEmulatorPacketType {
     None,       // Fallback, just log messages
     SevenByte,  // For Johnny Chung Lee's firmware
-    TwentyByte, // For pelvicthrustman's firmware
+    TwentyByte, // For Aaron Clovsky's firmware
 }
 
 fn main() {
@@ -285,7 +285,7 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
             if read == 0 {
                 communication_mode = ControllerEmulatorPacketType::TwentyByte;
                 if verbose {
-                    println!("No response. I suspect this is pelvicthrustman's work!");
+                    println!("No response. I suspect this is Aaron Clovsky's work!");
                 }
             } if response[0] == ('x' as u8) {
                 communication_mode = ControllerEmulatorPacketType::SevenByte;
