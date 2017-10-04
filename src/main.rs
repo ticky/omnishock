@@ -37,7 +37,7 @@ fn main() {
                 .default_value("normal")
                 .possible_value("normal")
                 .possible_value("right-stick")
-                /*.possible_value("cross-and-square")*/))
+                .possible_value("cross-and-square")))
         .subcommand(clap::SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
@@ -189,8 +189,8 @@ fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
     let r1_button_value = convert_button(controller.button(sdl2::controller::Button::RightShoulder));
     let triangle_value = convert_button(controller.button(sdl2::controller::Button::Y));
     let circle_value = convert_button(controller.button(sdl2::controller::Button::B));
-    let cross_value = convert_button(controller.button(sdl2::controller::Button::A));
-    let square_value = convert_button(controller.button(sdl2::controller::Button::X));
+    let cross_value;
+    let square_value;
 
     let right_stick_x_value = convert_whole_axis(controller.axis(sdl2::controller::Axis::RightX)/*.saturating_mul(1.1)*/);
     let right_stick_y_value;
@@ -204,11 +204,26 @@ fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
             l2_button_value = convert_half_axis_negative(raw_right_stick_y);
             r2_button_value = convert_half_axis_positive(raw_right_stick_y);
 
+            cross_value = convert_button(controller.button(sdl2::controller::Button::A));
+            square_value = convert_button(controller.button(sdl2::controller::Button::X));
+
             right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
+        }
+        "cross-and-square" => {
+            l2_button_value = convert_button(controller.button(sdl2::controller::Button::A));
+            r2_button_value = convert_button(controller.button(sdl2::controller::Button::X));
+
+            cross_value = convert_half_axis_positive(raw_right_trigger);
+            square_value = convert_half_axis_positive(raw_left_trigger);
+
+            right_stick_y_value = convert_whole_axis(raw_right_stick_y/*.saturating_mul(1.1)*/);
         }
         _ => {
             l2_button_value = convert_half_axis_positive(raw_left_trigger);
             r2_button_value = convert_half_axis_positive(raw_right_trigger);
+
+            cross_value = convert_button(controller.button(sdl2::controller::Button::A));
+            square_value = convert_button(controller.button(sdl2::controller::Button::X));
 
             right_stick_y_value = convert_whole_axis(raw_right_stick_y/*.saturating_mul(1.1)*/);
         }
