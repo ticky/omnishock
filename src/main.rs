@@ -18,7 +18,7 @@ enum ControllerEmulatorPacketType {
 }
 
 fn main() {
-    let global_arguments = app_from_crate!()
+    let arguments = app_from_crate!()
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
         .arg(
             clap::Arg::with_name("verbose")
@@ -65,17 +65,15 @@ fn main() {
         sdl_manager.active_controllers.len()
     );
 
-    let subcommand_name = global_arguments.subcommand_name();
+    let subcommand_name = arguments.subcommand_name();
 
     match subcommand_name {
         Some("ps2ce") => {
-            let command_arguments = global_arguments.subcommand_matches("ps2ce").unwrap();
-
-            send_to_ps2_controller_emulator(&global_arguments, command_arguments, &mut sdl_manager)
+            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager)
                 .unwrap();
         }
         Some("test") => {
-            print_events(&mut sdl_manager);
+            print_events(&arguments, &mut sdl_manager);
         }
         _ => (),
     }
@@ -244,11 +242,11 @@ fn controller_map_seven_byte(
 }
 
 fn send_to_ps2_controller_emulator(
-    global_arguments: &clap::ArgMatches,
-    command_arguments: &clap::ArgMatches,
+    arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
 ) -> io::Result<()> {
-    let verbose = global_arguments.is_present("verbose");
+    let verbose = arguments.is_present("verbose");
+    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
     let device_path = command_arguments.value_of("device").unwrap();
 
     if verbose {
@@ -438,8 +436,12 @@ fn send_to_ps2_controller_emulator(
     Ok(())
 }
 
-fn print_events(sdl_manager: &mut SDLManager) {
+fn print_events(
+    arguments: &clap::ArgMatches,
+    sdl_manager: &mut SDLManager,
+) {
     println!("Printing all controller events...");
+
     for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
 
