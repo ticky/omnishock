@@ -2,43 +2,58 @@ extern crate sdl2;
 extern crate serial;
 #[macro_use]
 extern crate clap;
+use serial::prelude::*;
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
-use serial::prelude::*;
 
 static DUALSHOCK_MAGIC: u8 = 0x5A;
 
 enum ControllerEmulatorPacketType {
-    None,       // Fallback, just log messages
-    SevenByte,  // For Johnny Chung Lee's firmware
+    None, // Fallback, just log messages
+    SevenByte, // For Johnny Chung Lee's firmware
     TwentyByte, // For Aaron Clovsky's firmware
 }
 
 fn main() {
     let global_arguments = app_from_crate!()
         .setting(clap::AppSettings::SubcommandRequiredElseHelp)
-        .arg(clap::Arg::with_name("verbose")
-            .long("verbose")
-            .short("v")
-            .help("Print more information about activity"))
-        .subcommand(clap::SubCommand::with_name("ps2ce")
-            .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
-            .arg(clap::Arg::with_name("device")
-                .index(1)
-                .takes_value(true)
-                .required(true)
-                .help("Device to use to communcate.\nUsually /dev/cu.usbmodem12341 for USB Serial on macOS."))
-            .arg(clap::Arg::with_name("trigger-mode")
-                .long("trigger-mode")
-                .short("t")
-                .takes_value(true)
-                .help("How to map the analog triggers")
-                .default_value("normal")
-                .possible_value("normal")
-                .possible_value("right-stick")
-                .possible_value("cross-and-square")))
-        .subcommand(clap::SubCommand::with_name("test").about("Tests the game controller subsystem"))
+        .arg(
+            clap::Arg::with_name("verbose")
+                .long("verbose")
+                .short("v")
+                .help("Print more information about activity"),
+        )
+        .subcommand(
+            clap::SubCommand::with_name("ps2ce")
+                .about(
+                    "Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator",
+                )
+                .arg(
+                    clap::Arg::with_name("device")
+                        .index(1)
+                        .takes_value(true)
+                        .required(true)
+                        .help(
+                            "Device to use to communcate.\n\
+                             (Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)",
+                        ),
+                )
+                .arg(
+                    clap::Arg::with_name("trigger-mode")
+                        .long("trigger-mode")
+                        .short("t")
+                        .takes_value(true)
+                        .help("How to map the analog triggers")
+                        .default_value("normal")
+                        .possible_value("normal")
+                        .possible_value("right-stick")
+                        .possible_value("cross-and-square"),
+                ),
+        )
+        .subcommand(clap::SubCommand::with_name("test").about(
+            "Tests the game controller subsystem",
+        ))
         .get_matches();
 
     // Initialise SDL2, and the game controller subsystem
@@ -80,16 +95,20 @@ fn main() {
                     active_controllers.insert(*controller_id, controller);
                 }
                 Err(error) => {
-                    println!("could not initialise joystick {} as controller: {:?}",
-                             id,
-                             error)
+                    println!(
+                        "could not initialise joystick {} as controller: {:?}",
+                        id,
+                        error
+                    )
                 }
             }
         }
     }
 
-    println!("(There are {} controllers connected)",
-             active_controllers.len());
+    println!(
+        "(There are {} controllers connected)",
+        active_controllers.len()
+    );
 
     let subcommand_name = global_arguments.subcommand_name();
 
@@ -97,16 +116,20 @@ fn main() {
         Some("ps2ce") => {
             let command_arguments = global_arguments.subcommand_matches("ps2ce").unwrap();
 
-            send_to_ps2_controller_emulator(&global_arguments,
-                                            command_arguments,
-                                            sdl_context,
-                                            game_controller_subsystem,
-                                            &mut active_controllers).unwrap();
+            send_to_ps2_controller_emulator(
+                &global_arguments,
+                command_arguments,
+                sdl_context,
+                game_controller_subsystem,
+                &mut active_controllers,
+            ).unwrap();
         }
         Some("test") => {
-            print_events(sdl_context,
-                         game_controller_subsystem,
-                         &mut active_controllers);
+            print_events(
+                sdl_context,
+                game_controller_subsystem,
+                &mut active_controllers,
+            );
         }
         _ => (),
     }
@@ -114,9 +137,12 @@ fn main() {
 
 // Misty gave me a special license exception for this stanza
 // <https://twitter.com/mistydemeo/status/914745750369714176>
-fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
+fn collapse_bits(bytes: &[u8]) -> Result<u8, String> {
     if !bytes.len() == 8 {
-        return Err(format!("Input must be 8 bytes long ({} elements provided)", bytes.len()));
+        return Err(format!(
+            "Input must be 8 bytes long ({} elements provided)",
+            bytes.len()
+        ));
     }
     let mut result = 0;
     for (i, byte) in bytes.iter().enumerate() {
@@ -137,8 +163,8 @@ fn collapse_bits(bytes : &[u8]) -> Result<u8, String> {
 fn convert_button(button: bool) -> u8 {
     return match button {
         true => 0xFF,
-        false => 0x00
-    }
+        false => 0x00,
+    };
 }
 
 fn convert_whole_axis(number: i16) -> u8 {
@@ -166,8 +192,10 @@ fn combine_trigger_axes(left: i16, right: i16) -> u8 {
 }
 
 
-fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
-                             trigger_mode: &str) -> Vec<u8> {
+fn controller_map_seven_byte(
+    controller: &sdl2::controller::GameController,
+    trigger_mode: &str,
+) -> Vec<u8> {
     let raw_left_trigger = controller.axis(sdl2::controller::Axis::TriggerLeft);
     let raw_right_trigger = controller.axis(sdl2::controller::Axis::TriggerRight);
     let raw_right_stick_y = controller.axis(sdl2::controller::Axis::RightY);
@@ -186,16 +214,23 @@ fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
     let l2_button_value;
     let r2_button_value;
     let l1_button_value = convert_button(controller.button(sdl2::controller::Button::LeftShoulder));
-    let r1_button_value = convert_button(controller.button(sdl2::controller::Button::RightShoulder));
+    let r1_button_value =
+        convert_button(controller.button(sdl2::controller::Button::RightShoulder));
     let triangle_value = convert_button(controller.button(sdl2::controller::Button::Y));
     let circle_value = convert_button(controller.button(sdl2::controller::Button::B));
     let cross_value;
     let square_value;
 
-    let right_stick_x_value = convert_whole_axis(controller.axis(sdl2::controller::Axis::RightX)/*.saturating_mul(1.1)*/);
+    let right_stick_x_value = convert_whole_axis(
+        controller.axis(sdl2::controller::Axis::RightX), /*.saturating_mul(1.1)*/
+    );
     let right_stick_y_value;
-    let left_stick_x_value = convert_whole_axis(controller.axis(sdl2::controller::Axis::LeftX)/*.saturating_mul(1.1)*/);
-    let left_stick_y_value = convert_whole_axis(controller.axis(sdl2::controller::Axis::LeftY)/*.saturating_mul(1.1)*/);
+    let left_stick_x_value = convert_whole_axis(
+        controller.axis(sdl2::controller::Axis::LeftX), /*.saturating_mul(1.1)*/
+    );
+    let left_stick_y_value = convert_whole_axis(
+        controller.axis(sdl2::controller::Axis::LeftY), /*.saturating_mul(1.1)*/
+    );
 
     // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
 
@@ -216,7 +251,8 @@ fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
             cross_value = convert_half_axis_positive(raw_right_trigger);
             square_value = convert_half_axis_positive(raw_left_trigger);
 
-            right_stick_y_value = convert_whole_axis(raw_right_stick_y/*.saturating_mul(1.1)*/);
+            right_stick_y_value =
+                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
         }
         _ => {
             l2_button_value = convert_half_axis_positive(raw_left_trigger);
@@ -225,40 +261,64 @@ fn controller_map_seven_byte(controller: &sdl2::controller::GameController,
             cross_value = convert_button(controller.button(sdl2::controller::Button::A));
             square_value = convert_button(controller.button(sdl2::controller::Button::X));
 
-            right_stick_y_value = convert_whole_axis(raw_right_stick_y/*.saturating_mul(1.1)*/);
+            right_stick_y_value =
+                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
         }
     }
 
-    let buttons1 = vec!(select_value, left_stick_value, right_stick_value, start_value,
-                        dpad_up_value, dpad_right_value, dpad_down_value, dpad_left_value);
+    let buttons1 = vec![
+        select_value,
+        left_stick_value,
+        right_stick_value,
+        start_value,
+        dpad_up_value,
+        dpad_right_value,
+        dpad_down_value,
+        dpad_left_value,
+    ];
 
-    let buttons2 = vec!(l2_button_value, r2_button_value, l1_button_value, r1_button_value,
-                        triangle_value, circle_value, cross_value, square_value);
+    let buttons2 = vec![
+        l2_button_value,
+        r2_button_value,
+        l1_button_value,
+        r1_button_value,
+        triangle_value,
+        circle_value,
+        cross_value,
+        square_value,
+    ];
 
-    return vec!(
+    return vec![
         DUALSHOCK_MAGIC,
         collapse_bits(&buttons1).unwrap(),
         collapse_bits(&buttons2).unwrap(),
-        right_stick_x_value, right_stick_y_value,
-        left_stick_x_value, left_stick_y_value
-    );
+        right_stick_x_value,
+        right_stick_y_value,
+        left_stick_x_value,
+        left_stick_y_value,
+    ];
 }
 
-fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
-                                   command_arguments: &clap::ArgMatches,
-                                   sdl_context: sdl2::Sdl,
-                                   game_controller_subsystem: sdl2::GameControllerSubsystem,
-                                   active_controllers: &mut HashMap<i32, sdl2::controller::GameController>) -> io::Result<()> {
+fn send_to_ps2_controller_emulator(
+    global_arguments: &clap::ArgMatches,
+    command_arguments: &clap::ArgMatches,
+    sdl_context: sdl2::Sdl,
+    game_controller_subsystem: sdl2::GameControllerSubsystem,
+    active_controllers: &mut HashMap<i32, sdl2::controller::GameController>,
+) -> io::Result<()> {
     let verbose = global_arguments.is_present("verbose");
     let device_path = command_arguments.value_of("device").unwrap();
 
     if verbose {
-        println!("Connecting to PS2 Controller Emulator device at '{}'...", device_path);
+        println!(
+            "Connecting to PS2 Controller Emulator device at '{}'...",
+            device_path
+        );
     }
 
     let mut serial = match serial::open(device_path) {
         Ok(serial) => serial,
-        Err(error) => panic!("failed to open serial device: {}", error)
+        Err(error) => panic!("failed to open serial device: {}", error),
     };
 
     serial.reconfigure(&|settings| {
@@ -277,7 +337,7 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
     let mut response = vec![0; 4];
 
     // Send one space character (this won't do anything on either type)
-    serial.write(&vec!(0x20))?;
+    serial.write(&vec![0x20])?;
 
     // Check the response!
     match serial.read(&mut response) {
@@ -287,7 +347,8 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
                 if verbose {
                     println!("No response. I suspect this is Aaron Clovsky's work!");
                 }
-            } if response[0] == ('x' as u8) {
+            }
+            if response[0] == ('x' as u8) {
                 communication_mode = ControllerEmulatorPacketType::SevenByte;
                 if verbose {
                     println!("We got an 'x' back - this is probably Johnny Chung Lee's work!");
@@ -295,7 +356,7 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
             } else {
                 println!("Unrecognised response: {:?}", response);
             }
-        },
+        }
         Err(error) => {
             println!("failed reading from device '{}': {}", device_path, error);
         }
@@ -317,31 +378,41 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
                         let controller_id = &controller.instance_id();
                         if !active_controllers.contains_key(controller_id) {
                             println!("{} (#{}): connected", controller.name(), controller_id);
-                            println!("(There are {} controllers connected)",
-                                     active_controllers.len() + 1);
+                            println!(
+                                "(There are {} controllers connected)",
+                                active_controllers.len() + 1
+                            );
                             active_controllers.insert(*controller_id, controller);
                         }
                     }
                     Err(error) => {
-                        println!("could not initialise connected joystick {}: {:?}",
-                                 which,
-                                 error)
+                        println!(
+                            "could not initialise connected joystick {}: {:?}",
+                            which,
+                            error
+                        )
                     }
                 }
             }
 
             Event::ControllerDeviceRemoved { which, .. } => {
-                println!("{} (#{}): disconnected",
-                         active_controllers[&which].name(),
-                         which);
-                println!("(There are {} controllers connected)",
-                         active_controllers.len() - 1);
+                println!(
+                    "{} (#{}): disconnected",
+                    active_controllers[&which].name(),
+                    which
+                );
+                println!(
+                    "(There are {} controllers connected)",
+                    active_controllers.len() - 1
+                );
                 active_controllers.remove(&which);
             }
 
-            Event::ControllerAxisMotion { which, .. } | Event::ControllerButtonDown { which, .. } | Event::ControllerButtonUp { which, .. } => {
+            Event::ControllerAxisMotion { which, .. } |
+            Event::ControllerButtonDown { which, .. } |
+            Event::ControllerButtonUp { which, .. } => {
                 if which != 0 {
-                    continue
+                    continue;
                 }
 
                 let sent;
@@ -352,7 +423,8 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
                     }
 
                     ControllerEmulatorPacketType::SevenByte => {
-                        let state = controller_map_seven_byte(&active_controllers[&which], trigger_mode);
+                        let state =
+                            controller_map_seven_byte(&active_controllers[&which], trigger_mode);
 
                         serial.write_all(&state)?;
 
@@ -360,7 +432,8 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
                     }
 
                     ControllerEmulatorPacketType::TwentyByte => {
-                        let state = controller_map_seven_byte(&active_controllers[&which], trigger_mode);
+                        let state =
+                            controller_map_seven_byte(&active_controllers[&which], trigger_mode);
 
                         serial.write_all(&state)?;
 
@@ -413,9 +486,11 @@ fn send_to_ps2_controller_emulator(global_arguments: &clap::ArgMatches,
     Ok(())
 }
 
-fn print_events(sdl_context: sdl2::Sdl,
-                game_controller_subsystem: sdl2::GameControllerSubsystem,
-                active_controllers: &mut HashMap<i32, sdl2::controller::GameController>) {
+fn print_events(
+    sdl_context: sdl2::Sdl,
+    game_controller_subsystem: sdl2::GameControllerSubsystem,
+    active_controllers: &mut HashMap<i32, sdl2::controller::GameController>,
+) {
     println!("Printing all controller events...");
     for event in sdl_context.event_pump().unwrap().wait_iter() {
         use sdl2::event::Event;
@@ -427,54 +502,70 @@ fn print_events(sdl_context: sdl2::Sdl,
                         let controller_id = &controller.instance_id();
                         if !active_controllers.contains_key(controller_id) {
                             println!("{} (#{}): connected", controller.name(), controller_id);
-                            println!("(There are {} controllers connected)",
-                                     active_controllers.len() + 1);
+                            println!(
+                                "(There are {} controllers connected)",
+                                active_controllers.len() + 1
+                            );
                             active_controllers.insert(*controller_id, controller);
                         }
                     }
                     Err(error) => {
-                        println!("could not initialise connected joystick {}: {:?}",
-                                 which,
-                                 error)
+                        println!(
+                            "could not initialise connected joystick {}: {:?}",
+                            which,
+                            error
+                        )
                     }
                 }
             }
 
             Event::ControllerDeviceRemoved { which, .. } => {
-                println!("{} (#{}): disconnected",
-                         active_controllers[&which].name(),
-                         which);
-                println!("(There are {} controllers connected)",
-                         active_controllers.len() - 1);
+                println!(
+                    "{} (#{}): disconnected",
+                    active_controllers[&which].name(),
+                    which
+                );
+                println!(
+                    "(There are {} controllers connected)",
+                    active_controllers.len() - 1
+                );
                 active_controllers.remove(&which);
             }
 
             Event::ControllerDeviceRemapped { which, .. } => {
-                println!("{} (#{}) remapped!",
-                         active_controllers[&which].name(),
-                         which);
+                println!(
+                    "{} (#{}) remapped!",
+                    active_controllers[&which].name(),
+                    which
+                );
             }
 
             Event::ControllerAxisMotion { which, axis, value, .. } => {
-                println!("{} (#{}): {:?}: {}",
-                         active_controllers[&which].name(),
-                         which,
-                         axis,
-                         value);
+                println!(
+                    "{} (#{}): {:?}: {}",
+                    active_controllers[&which].name(),
+                    which,
+                    axis,
+                    value
+                );
             }
 
             Event::ControllerButtonDown { which, button, .. } => {
-                println!("{} (#{}): {:?}: down",
-                         active_controllers[&which].name(),
-                         which,
-                         button);
+                println!(
+                    "{} (#{}): {:?}: down",
+                    active_controllers[&which].name(),
+                    which,
+                    button
+                );
             }
 
             Event::ControllerButtonUp { which, button, .. } => {
-                println!("{} (#{}): {:?}: up",
-                         active_controllers[&which].name(),
-                         which,
-                         button);
+                println!(
+                    "{} (#{}): {:?}: up",
+                    active_controllers[&which].name(),
+                    which,
+                    button
+                );
             }
 
             Event::Quit { .. } => break,
