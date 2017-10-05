@@ -7,7 +7,7 @@ Something to do with game controllers!
 ## Prerequisites
 
 - Rust
-- SDL2 v2.0.5 or later
+- SDL2 v2.0.6 or later
 
 ## Building
 

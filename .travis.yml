@@ -1,21 +1,22 @@
 language: rust
 cache: cargo
 rust:
-  - 1.13.0
+  - 1.19.0
   - stable
   - beta
   - nightly
 matrix:
   allow_failures:
     - rust: nightly
-before_script: (cargo install rustfmt || true)
+before_script:
+  - export PATH="$PATH:$HOME/.cargo/bin"
+  - which rustfmt || cargo install rustfmt
 install:
-  - wget https://www.libsdl.org/release/SDL2-2.0.5.tar.gz -O sdl2.tar.gz
+  - wget https://www.libsdl.org/release/SDL2-2.0.6.tar.gz -O sdl2.tar.gz
   - tar xzf sdl2.tar.gz
   - pushd SDL2-* && ./configure --disable-audio --disable-video --disable-render --disable-power && make && sudo make install && popd
 script:
 - |
-  export PATH=$PATH:~/.cargo/bin &&
   cargo fmt -- --write-mode=diff &&
   cargo build &&
   cargo test
