@@ -196,41 +196,39 @@ fn controller_map_seven_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
 ) -> Vec<u8> {
-    let raw_left_trigger = controller.axis(sdl2::controller::Axis::TriggerLeft);
-    let raw_right_trigger = controller.axis(sdl2::controller::Axis::TriggerRight);
-    let raw_right_stick_y = controller.axis(sdl2::controller::Axis::RightY);
+    use sdl2::controller::{Axis, Button};
+
+    let raw_left_trigger = controller.axis(Axis::TriggerLeft);
+    let raw_right_trigger = controller.axis(Axis::TriggerRight);
+    let raw_right_stick_y = controller.axis(Axis::RightY);
 
     // buttons1
-    let select_value = convert_button(controller.button(sdl2::controller::Button::Back));
-    let left_stick_value = convert_button(controller.button(sdl2::controller::Button::LeftStick));
-    let right_stick_value = convert_button(controller.button(sdl2::controller::Button::RightStick));
-    let start_value = convert_button(controller.button(sdl2::controller::Button::Start));
-    let dpad_up_value = convert_button(controller.button(sdl2::controller::Button::DPadUp));
-    let dpad_right_value = convert_button(controller.button(sdl2::controller::Button::DPadRight));
-    let dpad_down_value = convert_button(controller.button(sdl2::controller::Button::DPadDown));
-    let dpad_left_value = convert_button(controller.button(sdl2::controller::Button::DPadLeft));
+    let select_value = convert_button(controller.button(Button::Back));
+    let left_stick_value = convert_button(controller.button(Button::LeftStick));
+    let right_stick_value = convert_button(controller.button(Button::RightStick));
+    let start_value = convert_button(controller.button(Button::Start));
+    let dpad_up_value = convert_button(controller.button(Button::DPadUp));
+    let dpad_right_value = convert_button(controller.button(Button::DPadRight));
+    let dpad_down_value = convert_button(controller.button(Button::DPadDown));
+    let dpad_left_value = convert_button(controller.button(Button::DPadLeft));
 
     // buttons2
     let l2_button_value;
     let r2_button_value;
-    let l1_button_value = convert_button(controller.button(sdl2::controller::Button::LeftShoulder));
-    let r1_button_value =
-        convert_button(controller.button(sdl2::controller::Button::RightShoulder));
-    let triangle_value = convert_button(controller.button(sdl2::controller::Button::Y));
-    let circle_value = convert_button(controller.button(sdl2::controller::Button::B));
+    let l1_button_value = convert_button(controller.button(Button::LeftShoulder));
+    let r1_button_value = convert_button(controller.button(Button::RightShoulder));
+    let triangle_value = convert_button(controller.button(Button::Y));
+    let circle_value = convert_button(controller.button(Button::B));
     let cross_value;
     let square_value;
 
-    let right_stick_x_value = convert_whole_axis(
-        controller.axis(sdl2::controller::Axis::RightX), /*.saturating_mul(1.1)*/
-    );
+    let right_stick_x_value =
+        convert_whole_axis(controller.axis(Axis::RightX) /*.saturating_mul(1.1)*/);
     let right_stick_y_value;
-    let left_stick_x_value = convert_whole_axis(
-        controller.axis(sdl2::controller::Axis::LeftX), /*.saturating_mul(1.1)*/
-    );
-    let left_stick_y_value = convert_whole_axis(
-        controller.axis(sdl2::controller::Axis::LeftY), /*.saturating_mul(1.1)*/
-    );
+    let left_stick_x_value =
+        convert_whole_axis(controller.axis(Axis::LeftX) /*.saturating_mul(1.1)*/);
+    let left_stick_y_value =
+        convert_whole_axis(controller.axis(Axis::LeftY) /*.saturating_mul(1.1)*/);
 
     // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
 
@@ -239,14 +237,14 @@ fn controller_map_seven_byte(
             l2_button_value = convert_half_axis_negative(raw_right_stick_y);
             r2_button_value = convert_half_axis_positive(raw_right_stick_y);
 
-            cross_value = convert_button(controller.button(sdl2::controller::Button::A));
-            square_value = convert_button(controller.button(sdl2::controller::Button::X));
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
 
             right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button(controller.button(sdl2::controller::Button::A));
-            r2_button_value = convert_button(controller.button(sdl2::controller::Button::X));
+            l2_button_value = convert_button(controller.button(Button::A));
+            r2_button_value = convert_button(controller.button(Button::X));
 
             cross_value = convert_half_axis_positive(raw_right_trigger);
             square_value = convert_half_axis_positive(raw_left_trigger);
@@ -258,8 +256,8 @@ fn controller_map_seven_byte(
             l2_button_value = convert_half_axis_positive(raw_left_trigger);
             r2_button_value = convert_half_axis_positive(raw_right_trigger);
 
-            cross_value = convert_button(controller.button(sdl2::controller::Button::A));
-            square_value = convert_button(controller.button(sdl2::controller::Button::X));
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
 
             right_stick_y_value =
                 convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
