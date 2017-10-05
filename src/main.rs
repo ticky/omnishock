@@ -17,21 +17,23 @@ enum ControllerEmulatorPacketType {
 }
 
 fn main() {
+    use clap::{AppSettings, Arg, SubCommand};
+
     let arguments = app_from_crate!()
-        .setting(clap::AppSettings::SubcommandRequiredElseHelp)
+        .setting(AppSettings::SubcommandRequiredElseHelp)
         .arg(
-            clap::Arg::with_name("verbose")
+            Arg::with_name("verbose")
                 .long("verbose")
                 .short("v")
                 .help("Print more information about activity"),
         )
         .subcommand(
-            clap::SubCommand::with_name("ps2ce")
+            SubCommand::with_name("ps2ce")
                 .about(
                     "Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator",
                 )
                 .arg(
-                    clap::Arg::with_name("device")
+                    Arg::with_name("device")
                         .index(1)
                         .takes_value(true)
                         .required(true)
@@ -41,7 +43,7 @@ fn main() {
                         ),
                 )
                 .arg(
-                    clap::Arg::with_name("trigger-mode")
+                    Arg::with_name("trigger-mode")
                         .long("trigger-mode")
                         .short("t")
                         .takes_value(true)
@@ -52,7 +54,7 @@ fn main() {
                         .possible_value("cross-and-square"),
                 ),
         )
-        .subcommand(clap::SubCommand::with_name("test").about(
+        .subcommand(SubCommand::with_name("test").about(
             "Tests the game controller subsystem",
         ))
         .get_matches();
