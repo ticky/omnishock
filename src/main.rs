@@ -2,9 +2,8 @@ extern crate sdl2;
 extern crate serial;
 #[macro_use]
 extern crate clap;
-use serial::prelude::*;
-use std::io;
-use std::io::prelude::*;
+use serial::prelude::{SerialPort};
+use std::io::prelude::{Read, Write};
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -65,12 +64,9 @@ fn main() {
         sdl_manager.active_controllers.len()
     );
 
-    let subcommand_name = arguments.subcommand_name();
-
-    match subcommand_name {
+    match arguments.subcommand_name() {
         Some("ps2ce") => {
-            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager)
-                .unwrap();
+            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager).unwrap();
         }
         Some("test") => {
             print_events(&arguments, &mut sdl_manager);
@@ -244,7 +240,7 @@ fn controller_map_seven_byte(
 fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
-) -> io::Result<()> {
+) -> std::io::Result<()> {
     let verbose = arguments.is_present("verbose");
     let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
     let device_path = command_arguments.value_of("device").unwrap();
@@ -436,10 +432,7 @@ fn send_to_ps2_controller_emulator(
     Ok(())
 }
 
-fn print_events(
-    arguments: &clap::ArgMatches,
-    sdl_manager: &mut SDLManager,
-) {
+fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
     println!("Printing all controller events...");
 
     for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
