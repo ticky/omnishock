@@ -2,7 +2,7 @@ extern crate sdl2;
 extern crate serial;
 #[macro_use]
 extern crate clap;
-use serial::prelude::{SerialPort};
+use serial::prelude::SerialPort;
 use std::io::prelude::{Read, Write};
 
 mod sdl_manager;
@@ -23,12 +23,9 @@ fn main() {
 
     let arguments = app_from_crate!()
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg(
-            Arg::with_name("verbose")
-                .long("verbose")
-                .short("v")
-                .help("Print more information about activity"),
-        )
+        .arg(Arg::with_name("verbose").long("verbose").short("v").help(
+            "Print more information about activity",
+        ))
         .subcommand(
             SubCommand::with_name("ps2ce")
                 .about(
@@ -269,12 +266,39 @@ fn send_to_ps2_controller_emulator(
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
-    if verbose {
-        println!("Connected! Determining device type...");
-    }
-
     // Create a four-byte response buffer
     let mut response = vec![0; 4];
+
+    if verbose {
+        println!("Clearing serial buffer...");
+    }
+
+    // The Teensy might be waiting to send bytes to a previous
+    // control session, if things didn't go so well.
+    // Let's make sure there's nothing left in that pipe!
+    while {
+        match serial.read(&mut response) {
+            Err(error) => {
+                // "Operation timed out" means we've reached
+                // the end of the buffer, which is what we want!
+                if error.kind() != std::io::ErrorKind::TimedOut {
+                    panic!("Error clearing serial buffer: {}", error);
+                }
+
+                false
+            }
+            _ => true,
+        }
+    }
+    {
+        if verbose {
+            println!("Buffer received: {:?}", response);
+        }
+    }
+
+    if verbose {
+        println!("Determining device type...");
+    }
 
     // Send one space character (this won't do anything on either type)
     serial.write(&vec![0x20])?;
