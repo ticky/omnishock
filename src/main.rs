@@ -9,6 +9,8 @@ mod sdl_manager;
 use sdl_manager::SDLManager;
 
 static DUALSHOCK_MAGIC: u8 = 0x5A;
+static SEVEN_BYTE_OK_RESPONSE: char = 'k';
+static SEVEN_BYTE_ERR_RESPONSE: char = 'x';
 
 enum ControllerEmulatorPacketType {
     None, // Fallback, just log messages
@@ -286,10 +288,13 @@ fn send_to_ps2_controller_emulator(
                     println!("No response. I suspect this is Aaron Clovsky's work!");
                 }
             }
-            if response[0] == ('x' as u8) {
+            if response[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
                 communication_mode = ControllerEmulatorPacketType::SevenByte;
                 if verbose {
-                    println!("We got an 'x' back - this is probably Johnny Chung Lee's work!");
+                    println!(
+                        "Response was '{}': this is probably Johnny Chung Lee's work!",
+                        SEVEN_BYTE_ERR_RESPONSE
+                    );
                 }
             } else {
                 println!("Unrecognised response: {:?}", response);
@@ -357,6 +362,8 @@ fn send_to_ps2_controller_emulator(
                 }
 
                 let sent;
+                let mut bytes_received = 0;
+                let mut received = vec![0; 4];
 
                 match communication_mode {
                     ControllerEmulatorPacketType::None => {
@@ -373,6 +380,19 @@ fn send_to_ps2_controller_emulator(
                         );
 
                         serial.write_all(&state)?;
+                        bytes_received = match serial.read(&mut received) {
+                            Ok(bytes) => bytes,
+                            Err(error) => {
+                                if verbose {
+                                    println!("Error reading response: {}", error);
+                                }
+                                0
+                            }
+                        };
+
+                        if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                            println!("WARNING: Adapter responded with an error status.")
+                        }
 
                         sent = state;
                     }
@@ -384,6 +404,16 @@ fn send_to_ps2_controller_emulator(
                         );
 
                         serial.write_all(&state)?;
+                        bytes_received = match serial.read(&mut received) {
+                            Ok(bytes) => bytes,
+                            Err(error) => {
+                                if verbose {
+                                    println!("Error reading response: {}", error);
+                                }
+
+                                0
+                            }
+                        };
 
                         sent = state;
                     }
@@ -391,6 +421,9 @@ fn send_to_ps2_controller_emulator(
 
                 if verbose {
                     println!("Sent: {:?}", sent);
+                    if bytes_received > 0 {
+                        println!("Received: {:?}", received);
+                    }
                 }
             }
 
