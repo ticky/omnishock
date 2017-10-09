@@ -8,6 +8,7 @@ use std::collections::HashMap;
 pub struct SDLManager {
     pub context: sdl2::Sdl,
     pub game_controller_subsystem: sdl2::GameControllerSubsystem,
+    pub haptic_subsystem: sdl2::HapticSubsystem,
     pub active_controllers: HashMap<i32, sdl2::controller::GameController>,
 }
 
@@ -15,6 +16,7 @@ impl SDLManager {
     pub fn init() -> SDLManager {
         // Initialise SDL2, and the game controller subsystem
         let context = sdl2::init().unwrap();
+        let haptic_subsystem = context.haptic().unwrap();
         let game_controller_subsystem = context.game_controller().unwrap();
 
         // Load pre-set controller mappings (note that SDL will still read
@@ -66,6 +68,7 @@ impl SDLManager {
         return SDLManager {
             context,
             game_controller_subsystem,
+            haptic_subsystem,
             active_controllers,
         };
     }
