@@ -9,6 +9,6 @@ license = "MIT"
 readme = "README.md"
 
 [dependencies]
-clap = "2.20.0"
+clap = "2.26.2"
 sdl2 = "0.30.0"
 serial = "0.4"
