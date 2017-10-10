@@ -20,7 +20,7 @@ impl SDLManager {
         let game_controller_subsystem = context.game_controller().unwrap();
 
         // Keep track of the controllers we know of
-        let mut active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
+        let active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
 
         let mut sdl_manager = SDLManager {
             context,
@@ -54,28 +54,26 @@ impl SDLManager {
     }
 
     pub fn add_available_controllers(&mut self) {
-        let joystick_count = match self.game_controller_subsystem.num_joysticks() {
+        let joystick_count = self.game_controller_subsystem.num_joysticks() {
             Ok(count) => count,
             Err(error) => panic!("failed to enumerate joysticks: {}", error),
         };
 
         for index in 0..joystick_count {
-            if self.game_controller_subsystem.is_game_controller(index) {
-                match self.game_controller_subsystem.open(index) {
-                    Ok(controller) => {
-                        let controller_id = &controller.instance_id();
-                        println!("{} (#{}): found", controller.name(), controller_id);
-                        self.active_controllers.insert(*controller_id, controller);
-                    }
-                    Err(error) => {
-                        println!(
-                            "could not initialise joystick {} as controller: {:?}",
-                            index,
-                            error
-                        )
-                    }
+            match self.add_controller(index) {
+                Err(error) => {
+                    println!("NOTE: joystick {} can't be used as a controller: {}", index, error);
                 }
-            }
+                _ => ()
+            };
         }
+    }
+
+    pub fn add_controller(&mut self, index: u32) -> Result<(), sdl2::IntegerOrSdlError> {
+        let controller = self.game_controller_subsystem.open(index)?;
+        let controller_id = &controller.instance_id();
+        println!("{} (#{}): found", controller.name(), controller_id);
+        self.active_controllers.insert(*controller_id, controller);
+        Ok(())
     }
 }
