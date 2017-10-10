@@ -340,7 +340,10 @@ fn send_to_ps2_controller_emulator(
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
-                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(true) {
+                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
+                    true,
+                )
+                {
                     match sdl_manager.add_controller(which as u32) {
                         Ok(_) => {
                             println!(
@@ -367,7 +370,7 @@ fn send_to_ps2_controller_emulator(
                             sdl_manager.active_controllers.len()
                         );
                     }
-                    None => ()
+                    None => (),
                 };
             }
 
@@ -492,7 +495,10 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
-                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(true) {
+                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
+                    true,
+                )
+                {
                     match sdl_manager.add_controller(which as u32) {
                         Ok(_) => {
                             println!(
@@ -519,7 +525,7 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                             sdl_manager.active_controllers.len()
                         );
                     }
-                    None => ()
+                    None => (),
                 };
             }
 
@@ -536,14 +542,17 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                     Some(controller_manager) => {
                         match controller_manager.haptic {
                             Some(ref mut haptic) => {
-                                println!("Running haptic feedback for “{}”", controller_manager.controller.name());
+                                println!(
+                                    "Running haptic feedback for “{}”",
+                                    controller_manager.controller.name()
+                                );
                                 haptic.rumble_stop();
                                 haptic.rumble_play(1.0, 500);
                             }
-                            _ => ()
+                            _ => (),
                         }
                     }
-                    _ => ()
+                    _ => (),
                 };
             }
 

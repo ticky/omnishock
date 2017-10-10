@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 pub struct ControllerManager {
     pub controller: sdl2::controller::GameController,
-    pub haptic: Option<sdl2::haptic::Haptic>
+    pub haptic: Option<sdl2::haptic::Haptic>,
 }
 
 pub struct SDLManager {
@@ -74,7 +74,11 @@ impl SDLManager {
                     );
                 }
                 Err(error) => {
-                    println!("Note: joystick {} can't be used as a controller: {}", index, error);
+                    println!(
+                        "Note: joystick {} can't be used as a controller: {}",
+                        index,
+                        error
+                    );
                 }
             };
         }
@@ -82,22 +86,28 @@ impl SDLManager {
 
     fn insert_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
-        let haptic = self.haptic_subsystem.open_from_joystick_id(index as i32).ok();
+        let haptic = self.haptic_subsystem
+            .open_from_joystick_id(index as i32)
+            .ok();
         let controller_id = controller.instance_id();
 
         match haptic {
             None => {
-                println!("Note: “{}” (#{}) doesn't support haptic feedback.", controller.name(), controller_id);
+                println!(
+                    "Note: “{}” (#{}) doesn't support haptic feedback.",
+                    controller.name(),
+                    controller_id
+                );
             }
-            _ => ()
+            _ => (),
         }
 
-        let controller_manager = ControllerManager {
-            controller,
-            haptic
-        };
+        let controller_manager = ControllerManager { controller, haptic };
 
-        self.active_controllers.insert(controller_id, controller_manager);
+        self.active_controllers.insert(
+            controller_id,
+            controller_manager,
+        );
         Ok(controller_id)
     }
 
@@ -122,7 +132,9 @@ impl SDLManager {
 
     pub fn has_controller(&self, index: u32) -> Result<bool, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
-        return Ok(self.active_controllers.contains_key(&controller.instance_id()));
+        return Ok(self.active_controllers.contains_key(
+            &controller.instance_id(),
+        ));
     }
 
     pub fn remove_controller(&mut self, id: i32) -> Option<ControllerManager> {
@@ -134,9 +146,9 @@ impl SDLManager {
                     id
                 );
 
-                return Some(controller_manager)
-            },
-            None => None
+                return Some(controller_manager);
+            }
+            None => None,
         };
     }
 }
