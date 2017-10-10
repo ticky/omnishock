@@ -68,13 +68,13 @@ impl SDLManager {
             match self.insert_controller(index) {
                 Ok(controller_id) => {
                     println!(
-                        "Found {} (#{})",
+                        "Found “{}” (#{})",
                         self.active_controllers[&controller_id].controller.name(),
                         controller_id
                     );
                 }
                 Err(error) => {
-                    println!("NOTE: joystick {} can't be used as a controller: {}", index, error);
+                    println!("Note: joystick {} can't be used as a controller: {}", index, error);
                 }
             };
         }
@@ -83,10 +83,11 @@ impl SDLManager {
     fn insert_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
         let haptic = self.haptic_subsystem.open_from_joystick_id(index as i32).ok();
+        let controller_id = controller.instance_id();
 
         match haptic {
             None => {
-                println!("{} doesn't support haptic feedback.", controller.name());
+                println!("Note: “{}” (#{}) doesn't support haptic feedback.", controller.name(), controller_id);
             }
             _ => ()
         }
@@ -95,8 +96,6 @@ impl SDLManager {
             controller,
             haptic
         };
-
-        let controller_id = controller_manager.controller.instance_id();
 
         self.active_controllers.insert(controller_id, controller_manager);
         Ok(controller_id)
@@ -113,7 +112,7 @@ impl SDLManager {
         let result = self.insert_controller(index);
 
         println!(
-            "Added {} (#{})",
+            "Added “{}” (#{})",
             self.active_controllers[&controller_id].controller.name(),
             controller_id
         );
@@ -124,5 +123,20 @@ impl SDLManager {
     pub fn has_controller(&self, index: u32) -> Result<bool, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
         return Ok(self.active_controllers.contains_key(&controller.instance_id()));
+    }
+
+    pub fn remove_controller(&mut self, id: i32) -> Option<ControllerManager> {
+        return match self.active_controllers.remove(&id) {
+            Some(controller_manager) => {
+                println!(
+                    "Removed “{}” (#{})",
+                    controller_manager.controller.name(),
+                    id
+                );
+
+                return Some(controller_manager)
+            },
+            None => None
+        };
     }
 }
