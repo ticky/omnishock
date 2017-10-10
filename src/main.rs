@@ -523,14 +523,6 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                 };
             }
 
-            Event::ControllerDeviceRemapped { which, .. } => {
-                println!(
-                    "“{}” (#{}) remapped!",
-                    sdl_manager.active_controllers[&which].controller.name(),
-                    which
-                );
-            }
-
             Event::ControllerAxisMotion { which, axis, value, .. } => {
                 println!(
                     "“{}” (#{}): {:?}: {}",
