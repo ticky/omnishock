@@ -5,11 +5,16 @@ use std::collections::HashMap;
 // Structure for passing around access to the SDL Subsystems,
 // and central place for setting up defaults
 
+pub struct ControllerManager {
+    pub controller: sdl2::controller::GameController,
+    pub haptic: Option<sdl2::haptic::Haptic>
+}
+
 pub struct SDLManager {
     pub context: sdl2::Sdl,
     pub game_controller_subsystem: sdl2::GameControllerSubsystem,
     pub haptic_subsystem: sdl2::HapticSubsystem,
-    pub active_controllers: HashMap<i32, sdl2::controller::GameController>,
+    pub active_controllers: HashMap<i32, ControllerManager>,
 }
 
 impl SDLManager {
@@ -20,7 +25,7 @@ impl SDLManager {
         let game_controller_subsystem = context.game_controller().unwrap();
 
         // Keep track of the controllers we know of
-        let active_controllers: HashMap<i32, sdl2::controller::GameController> = HashMap::new();
+        let active_controllers: HashMap<i32, ControllerManager> = HashMap::new();
 
         let mut sdl_manager = SDLManager {
             context,
@@ -53,27 +58,71 @@ impl SDLManager {
         return sdl_manager;
     }
 
-    pub fn add_available_controllers(&mut self) {
-        let joystick_count = self.game_controller_subsystem.num_joysticks() {
+    fn add_available_controllers(&mut self) {
+        let joystick_count = match self.game_controller_subsystem.num_joysticks() {
             Ok(count) => count,
             Err(error) => panic!("failed to enumerate joysticks: {}", error),
         };
 
         for index in 0..joystick_count {
-            match self.add_controller(index) {
+            match self.insert_controller(index) {
+                Ok(controller_id) => {
+                    println!(
+                        "Found {} (#{})",
+                        self.active_controllers[&controller_id].controller.name(),
+                        controller_id
+                    );
+                }
                 Err(error) => {
                     println!("NOTE: joystick {} can't be used as a controller: {}", index, error);
                 }
-                _ => ()
             };
         }
     }
 
-    pub fn add_controller(&mut self, index: u32) -> Result<(), sdl2::IntegerOrSdlError> {
+    fn insert_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
-        let controller_id = &controller.instance_id();
-        println!("{} (#{}): found", controller.name(), controller_id);
-        self.active_controllers.insert(*controller_id, controller);
-        Ok(())
+        let haptic = self.haptic_subsystem.open_from_joystick_id(index as i32).ok();
+
+        match haptic {
+            None => {
+                println!("{} doesn't support haptic feedback.", controller.name());
+            }
+            _ => ()
+        }
+
+        let controller_manager = ControllerManager {
+            controller,
+            haptic
+        };
+
+        let controller_id = controller_manager.controller.instance_id();
+
+        self.active_controllers.insert(controller_id, controller_manager);
+        Ok(controller_id)
+    }
+
+    pub fn add_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
+        let controller = self.game_controller_subsystem.open(index)?;
+        let controller_id = controller.instance_id();
+
+        if self.active_controllers.contains_key(&controller_id) {
+            return Ok(controller_id);
+        }
+
+        let result = self.insert_controller(index);
+
+        println!(
+            "Added {} (#{})",
+            self.active_controllers[&controller_id].controller.name(),
+            controller_id
+        );
+
+        return result;
+    }
+
+    pub fn has_controller(&self, index: u32) -> Result<bool, sdl2::IntegerOrSdlError> {
+        let controller = self.game_controller_subsystem.open(index)?;
+        return Ok(self.active_controllers.contains_key(&controller.instance_id()));
     }
 }

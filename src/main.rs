@@ -340,35 +340,34 @@ fn send_to_ps2_controller_emulator(
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
-                match sdl_manager.game_controller_subsystem.open(which as u32) {
-                    Ok(controller) => {
-                        let controller_id = &controller.instance_id();
-                        if !sdl_manager.active_controllers.contains_key(controller_id) {
-                            println!("{} (#{}): connected", controller.name(), controller_id);
+                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(true) {
+                    match sdl_manager.add_controller(which as u32) {
+                        Ok(controller_id) => {
+                            println!(
+                                "{} (#{}): connected",
+                                sdl_manager.active_controllers[&controller_id].controller.name(),
+                                controller_id
+                            );
                             println!(
                                 "(There are {} controllers connected)",
-                                sdl_manager.active_controllers.len() + 1
-                            );
-                            sdl_manager.active_controllers.insert(
-                                *controller_id,
-                                controller,
+                                sdl_manager.active_controllers.len()
                             );
                         }
-                    }
-                    Err(error) => {
-                        println!(
-                            "could not initialise connected joystick {}: {:?}",
-                            which,
-                            error
-                        )
-                    }
+                        Err(error) => {
+                            println!(
+                                "could not initialise connected joystick {}: {:?}",
+                                which,
+                                error
+                            )
+                        }
+                    };
                 }
             }
 
             Event::ControllerDeviceRemoved { which, .. } => {
                 println!(
                     "{} (#{}): disconnected",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which
                 );
                 println!(
@@ -392,14 +391,14 @@ fn send_to_ps2_controller_emulator(
                 match communication_mode {
                     ControllerEmulatorPacketType::None => {
                         sent = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which],
+                            &sdl_manager.active_controllers[&which].controller,
                             trigger_mode,
                         );
                     }
 
                     ControllerEmulatorPacketType::SevenByte => {
                         let state = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which],
+                            &sdl_manager.active_controllers[&which].controller,
                             trigger_mode,
                         );
 
@@ -423,7 +422,7 @@ fn send_to_ps2_controller_emulator(
 
                     ControllerEmulatorPacketType::TwentyByte => {
                         let state = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which],
+                            &sdl_manager.active_controllers[&which].controller,
                             trigger_mode,
                         );
 
@@ -499,35 +498,34 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
-                match sdl_manager.game_controller_subsystem.open(which as u32) {
-                    Ok(controller) => {
-                        let controller_id = &controller.instance_id();
-                        if !sdl_manager.active_controllers.contains_key(controller_id) {
-                            println!("{} (#{}): connected", controller.name(), controller_id);
+                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(true) {
+                    match sdl_manager.add_controller(which as u32) {
+                        Ok(controller_id) => {
+                            println!(
+                                "{} (#{}): connected",
+                                sdl_manager.active_controllers[&controller_id].controller.name(),
+                                controller_id
+                            );
                             println!(
                                 "(There are {} controllers connected)",
-                                sdl_manager.active_controllers.len() + 1
-                            );
-                            sdl_manager.active_controllers.insert(
-                                *controller_id,
-                                controller,
+                                sdl_manager.active_controllers.len()
                             );
                         }
-                    }
-                    Err(error) => {
-                        println!(
-                            "could not initialise connected joystick {}: {:?}",
-                            which,
-                            error
-                        )
-                    }
+                        Err(error) => {
+                            println!(
+                                "could not initialise connected joystick {}: {:?}",
+                                which,
+                                error
+                            )
+                        }
+                    };
                 }
             }
 
             Event::ControllerDeviceRemoved { which, .. } => {
                 println!(
                     "{} (#{}): disconnected",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which
                 );
                 println!(
@@ -540,7 +538,7 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerDeviceRemapped { which, .. } => {
                 println!(
                     "{} (#{}) remapped!",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which
                 );
             }
@@ -548,17 +546,31 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerAxisMotion { which, axis, value, .. } => {
                 println!(
                     "{} (#{}): {:?}: {}",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which,
                     axis,
                     value
                 );
+
+                match sdl_manager.active_controllers.get_mut(&which) {
+                    Some(controller_manager) => {
+                        match controller_manager.haptic {
+                            Some(ref mut haptic) => {
+                                println!("Running haptic feedback for {}", controller_manager.controller.name());
+                                haptic.rumble_stop();
+                                haptic.rumble_play(1.0, 500);
+                            }
+                            _ => ()
+                        }
+                    }
+                    _ => ()
+                };
             }
 
             Event::ControllerButtonDown { which, button, .. } => {
                 println!(
                     "{} (#{}): {:?}: down",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which,
                     button
                 );
@@ -567,7 +579,7 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerButtonUp { which, button, .. } => {
                 println!(
                     "{} (#{}): {:?}: up",
-                    sdl_manager.active_controllers[&which].name(),
+                    sdl_manager.active_controllers[&which].controller.name(),
                     which,
                     button
                 );
