@@ -132,7 +132,6 @@ fn combine_trigger_axes(left: i16, right: i16) -> u8 {
     return convert_whole_axis(left - right);
 }
 
-
 fn controller_map_seven_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
@@ -238,6 +237,147 @@ fn controller_map_seven_byte(
     ];
 }
 
+fn controller_map_twenty_byte(
+    controller: &sdl2::controller::GameController,
+    trigger_mode: &str,
+) -> Vec<u8> {
+    use sdl2::controller::{Axis, Button};
+
+    let raw_left_trigger = controller.axis(Axis::TriggerLeft);
+    let raw_right_trigger = controller.axis(Axis::TriggerRight);
+    let raw_right_stick_y = controller.axis(Axis::RightY);
+
+    // buttons1
+    let select_value = convert_button(controller.button(Button::Back));
+    let left_stick_value = convert_button(controller.button(Button::LeftStick));
+    let right_stick_value = convert_button(controller.button(Button::RightStick));
+    let start_value = convert_button(controller.button(Button::Start));
+    let dpad_up_value = convert_button(controller.button(Button::DPadUp));
+    let dpad_right_value = convert_button(controller.button(Button::DPadRight));
+    let dpad_down_value = convert_button(controller.button(Button::DPadDown));
+    let dpad_left_value = convert_button(controller.button(Button::DPadLeft));
+
+    // buttons2
+    let l2_button_value;
+    let r2_button_value;
+    let l1_button_value = convert_button(controller.button(Button::LeftShoulder));
+    let r1_button_value = convert_button(controller.button(Button::RightShoulder));
+    let triangle_value = convert_button(controller.button(Button::Y));
+    let circle_value = convert_button(controller.button(Button::B));
+    let cross_value;
+    let square_value;
+
+    let right_stick_x_value =
+        convert_whole_axis(controller.axis(Axis::RightX) /*.saturating_mul(1.1)*/);
+    let right_stick_y_value;
+    let left_stick_x_value =
+        convert_whole_axis(controller.axis(Axis::LeftX) /*.saturating_mul(1.1)*/);
+    let left_stick_y_value =
+        convert_whole_axis(controller.axis(Axis::LeftY) /*.saturating_mul(1.1)*/);
+
+    let pressure_right = convert_button(controller.button(Button::DPadRight));
+    let pressure_left = convert_button(controller.button(Button::DPadLeft));
+    let pressure_up = convert_button(controller.button(Button::DPadUp));
+    let pressure_down = convert_button(controller.button(Button::DPadDown));
+    let pressure_triangle = convert_button(controller.button(Button::Y));
+    let pressure_circle = convert_button(controller.button(Button::B));
+    let pressure_cross;
+    let pressure_square;
+    let pressure_l1 = convert_button(controller.button(Button::LeftShoulder));
+    let pressure_r1 = convert_button(controller.button(Button::RightShoulder));
+    let pressure_l2;
+    let pressure_r2;
+
+    // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
+
+    match trigger_mode {
+        "right-stick" => {
+            l2_button_value = convert_half_axis_negative(raw_right_stick_y);
+            r2_button_value = convert_half_axis_positive(raw_right_stick_y);
+
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
+
+            right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
+        }
+        "cross-and-square" => {
+            l2_button_value = convert_button(controller.button(Button::A));
+            r2_button_value = convert_button(controller.button(Button::X));
+
+            cross_value = convert_half_axis_positive(raw_right_trigger);
+            square_value = convert_half_axis_positive(raw_left_trigger);
+
+            right_stick_y_value =
+                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
+        }
+        _ => {
+            l2_button_value = convert_half_axis_positive(raw_left_trigger);
+            r2_button_value = convert_half_axis_positive(raw_right_trigger);
+
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
+
+            right_stick_y_value =
+                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
+        }
+    }
+
+    pressure_l2 = l2_button_value;
+    pressure_r2 = r2_button_value;
+    pressure_cross = cross_value;
+    pressure_square = square_value;
+
+    let buttons1 = vec![
+        select_value,
+        left_stick_value,
+        right_stick_value,
+        start_value,
+        dpad_up_value,
+        dpad_right_value,
+        dpad_down_value,
+        dpad_left_value,
+    ];
+
+    let buttons2 = vec![
+        l2_button_value,
+        r2_button_value,
+        l1_button_value,
+        r1_button_value,
+        triangle_value,
+        circle_value,
+        cross_value,
+        square_value,
+    ];
+
+    let mode_footer = match controller.button(Button::Guide) {
+        true => 0xAA,
+        false => 0x55,
+    };
+
+    return vec![
+        DUALSHOCK_MAGIC,
+        collapse_bits(&buttons1).unwrap(),
+        collapse_bits(&buttons2).unwrap(),
+        right_stick_x_value,
+        right_stick_y_value,
+        left_stick_x_value,
+        left_stick_y_value,
+        pressure_right,
+        pressure_left,
+        pressure_up,
+        pressure_down,
+        pressure_triangle,
+        pressure_circle,
+        pressure_cross,
+        pressure_square,
+        pressure_l1,
+        pressure_r1,
+        pressure_l2,
+        pressure_r2,
+        mode_footer,
+    ];
+}
+
 fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
@@ -300,6 +440,9 @@ fn send_to_ps2_controller_emulator(
         println!("Determining device type...");
     }
 
+    // TODO: Send one neutral, twenty-byte packet and check if the response
+    // is a valid motor state update or a "k" followed by several "x"es
+
     // Send one space character (this won't do anything on either type)
     serial.write(&vec![0x20])?;
 
@@ -326,6 +469,8 @@ fn send_to_ps2_controller_emulator(
         }
         Err(error) => {
             println!("failed reading from device '{}': {}", device_path, error);
+            // TODO: Make this actually detect rather than just fall back
+            communication_mode = ControllerEmulatorPacketType::TwentyByte;
         }
     };
 
@@ -387,7 +532,7 @@ fn send_to_ps2_controller_emulator(
 
                 match communication_mode {
                     ControllerEmulatorPacketType::None => {
-                        sent = controller_map_seven_byte(
+                        sent = controller_map_twenty_byte(
                             &sdl_manager.active_controllers[&which].controller,
                             trigger_mode,
                         );
@@ -418,7 +563,7 @@ fn send_to_ps2_controller_emulator(
                     }
 
                     ControllerEmulatorPacketType::TwentyByte => {
-                        let state = controller_map_seven_byte(
+                        let state = controller_map_twenty_byte(
                             &sdl_manager.active_controllers[&which].controller,
                             trigger_mode,
                         );
