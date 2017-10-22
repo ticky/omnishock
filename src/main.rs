@@ -480,121 +480,171 @@ fn send_to_ps2_controller_emulator(
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
-    for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
-        use sdl2::event::Event;
+    let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
-        match event {
-            Event::ControllerDeviceAdded { which, .. } => {
-                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
-                    true,
-                )
-                {
-                    match sdl_manager.add_controller(which as u32) {
-                        Ok(_) => {
+    'outer: loop {
+        // Wait for any events; but time out after 500ms
+        for event in event_pump.wait_timeout_iter(500) {
+            use sdl2::event::Event;
+
+            match event {
+                Event::ControllerDeviceAdded { which, .. } => {
+                    if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
+                        true,
+                    )
+                    {
+                        match sdl_manager.add_controller(which as u32) {
+                            Ok(_) => {
+                                println!(
+                                    "(There are {} controllers connected)",
+                                    sdl_manager.active_controllers.len()
+                                );
+                            }
+                            Err(error) => {
+                                println!(
+                                    "could not initialise connected joystick {}: {:?}",
+                                    which,
+                                    error
+                                )
+                            }
+                        };
+                    }
+                }
+
+                Event::ControllerDeviceRemoved { which, .. } => {
+                    match sdl_manager.remove_controller(which) {
+                        Some(_) => {
                             println!(
                                 "(There are {} controllers connected)",
                                 sdl_manager.active_controllers.len()
                             );
                         }
-                        Err(error) => {
-                            println!(
-                                "could not initialise connected joystick {}: {:?}",
-                                which,
-                                error
-                            )
-                        }
+                        None => (),
                     };
                 }
-            }
 
-            Event::ControllerDeviceRemoved { which, .. } => {
-                match sdl_manager.remove_controller(which) {
-                    Some(_) => {
-                        println!(
-                            "(There are {} controllers connected)",
-                            sdl_manager.active_controllers.len()
-                        );
-                    }
-                    None => (),
-                };
-            }
-
-            Event::ControllerAxisMotion { which, .. } |
-            Event::ControllerButtonDown { which, .. } |
-            Event::ControllerButtonUp { which, .. } => {
-                if which != 0 {
-                    continue;
-                }
-
-                let sent;
-                let mut bytes_received = 0;
-                let mut received = vec![0; 4];
-
-                match communication_mode {
-                    ControllerEmulatorPacketType::None => {
-                        sent = controller_map_twenty_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
+                Event::ControllerAxisMotion { which, .. } |
+                Event::ControllerButtonDown { which, .. } |
+                Event::ControllerButtonUp { which, .. } => {
+                    if which != 0 {
+                        continue;
                     }
 
-                    ControllerEmulatorPacketType::SevenByte => {
-                        let state = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
+                    let sent;
+                    let mut bytes_received = 0;
+                    let mut received = vec![0; 4];
 
-                        serial.write_all(&state)?;
-                        bytes_received = match serial.read(&mut received) {
-                            Ok(bytes) => bytes,
-                            Err(error) => {
-                                if verbose {
-                                    println!("Error reading response: {}", error);
-                                }
-                                0
-                            }
-                        };
-
-                        if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
-                            println!("WARNING: Adapter responded with an error status.")
+                    match communication_mode {
+                        ControllerEmulatorPacketType::None => {
+                            sent = controller_map_twenty_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
                         }
 
-                        sent = state;
-                    }
+                        ControllerEmulatorPacketType::SevenByte => {
+                            let state = controller_map_seven_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
 
-                    ControllerEmulatorPacketType::TwentyByte => {
-                        let state = controller_map_twenty_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
-
-                        serial.write_all(&state)?;
-                        bytes_received = match serial.read(&mut received) {
-                            Ok(bytes) => bytes,
-                            Err(error) => {
-                                if verbose {
-                                    println!("Error reading response: {}", error);
+                            serial.write_all(&state)?;
+                            bytes_received = match serial.read(&mut received) {
+                                Ok(bytes) => bytes,
+                                Err(error) => {
+                                    if verbose {
+                                        println!("Error reading response: {}", error);
+                                    }
+                                    0
                                 }
+                            };
 
-                                0
+                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                                println!("WARNING: Adapter responded with an error status.")
                             }
-                        };
 
-                        sent = state;
+                            sent = state;
+                        }
+
+                        ControllerEmulatorPacketType::TwentyByte => {
+                            let state = controller_map_twenty_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
+
+                            serial.write_all(&state)?;
+                            bytes_received = match serial.read(&mut received) {
+                                Ok(bytes) => bytes,
+                                Err(error) => {
+                                    if verbose {
+                                        println!("Error reading response: {}", error);
+                                    }
+
+                                    0
+                                }
+                            };
+
+                            sent = state;
+                        }
+                    };
+
+                    if verbose {
+                        println!("Sent: {:?}", sent);
+                        if bytes_received > 0 {
+                            println!("Received: {:?}", received);
+                        }
                     }
-                };
+                }
 
-                if verbose {
-                    println!("Sent: {:?}", sent);
-                    if bytes_received > 0 {
-                        println!("Received: {:?}", received);
+                Event::Quit { .. } => break 'outer,
+                _ => (),
+            }
+        }
+
+        // Timeout reached: If we're talking to a device that needs it,
+        // force an update, then continue to truck
+        match communication_mode {
+            ControllerEmulatorPacketType::TwentyByte => {
+                let controller_id = 0;
+
+                if sdl_manager.active_controllers.contains_key(&controller_id) {
+                    if verbose {
+                        println!("Sending update due to timeout");
+                    }
+
+                    let mut received = vec![0; 4];
+
+                    let state = controller_map_twenty_byte(
+                        &sdl_manager.active_controllers[&controller_id].controller,
+                        trigger_mode,
+                    );
+
+                    serial.write_all(&state)?;
+                    let bytes_received = match serial.read(&mut received) {
+                        Ok(bytes) => bytes,
+                        Err(error) => {
+                            if verbose {
+                                println!("Error reading response: {}", error);
+                            }
+
+                            0
+                        }
+                    };
+
+                    if verbose {
+                        println!("Sent: {:?}", state);
+                        if bytes_received > 0 {
+                            println!("Received: {:?}", received);
+                        }
+                    }
+                } else {
+                    if verbose {
+                        println!("Timed out but no controller is connected, so doing nothing.");
                     }
                 }
             }
-
-            Event::Quit { .. } => break,
-            _ => (),
-        }
+            _ => ()
+        };
     }
 
     // let buf = vec!(
