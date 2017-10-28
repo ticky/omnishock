@@ -378,6 +378,27 @@ fn controller_map_twenty_byte(
     ];
 }
 
+fn clear_serial_buffer(serial: &mut SerialPort) {
+    // Create a response buffer
+    let mut response = vec![0; 1];
+
+    while {
+        match serial.read(&mut response) {
+            Err(error) => {
+                // "Operation timed out" means we've reached
+                // the end of the buffer, which is what we want!
+                if error.kind() != std::io::ErrorKind::TimedOut {
+                    panic!("Error clearing serial buffer: {}", error);
+                }
+
+                false
+            }
+            _ => true,
+        }
+    }
+    {}
+}
+
 fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
@@ -416,25 +437,7 @@ fn send_to_ps2_controller_emulator(
     // The Teensy might be waiting to send bytes to a previous
     // control session, if things didn't go so well.
     // Let's make sure there's nothing left in that pipe!
-    while {
-        match serial.read(&mut response) {
-            Err(error) => {
-                // "Operation timed out" means we've reached
-                // the end of the buffer, which is what we want!
-                if error.kind() != std::io::ErrorKind::TimedOut {
-                    panic!("Error clearing serial buffer: {}", error);
-                }
-
-                false
-            }
-            _ => true,
-        }
-    }
-    {
-        if verbose {
-            println!("Buffer received: {:?}", response);
-        }
-    }
+    clear_serial_buffer(&mut serial);
 
     if verbose {
         println!("Determining device type...");
