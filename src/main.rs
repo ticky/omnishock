@@ -8,9 +8,17 @@ use std::io::prelude::{Read, Write};
 mod sdl_manager;
 use sdl_manager::SDLManager;
 
-static DUALSHOCK_MAGIC: u8 = 0x5A;
-static SEVEN_BYTE_OK_RESPONSE: char = 'k';
-static SEVEN_BYTE_ERR_RESPONSE: char = 'x';
+// The DualShock protocol uses 0x5A in many places!
+const DUALSHOCK_MAGIC: u8 = 0x5A;
+
+// Johnny Chung Lee's firmware responds with "k" on success,
+const SEVEN_BYTE_OK_RESPONSE: char = 'k';
+// and "x" when it recieves input it doesn't recognise.
+const SEVEN_BYTE_ERR_RESPONSE: char = 'x';
+
+// Aaron Clovsky's firmware responds with vibration information
+// which begins with the DUALSHOCK_MAGIC.
+const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
 enum ControllerEmulatorPacketType {
     None, // Fallback, just log messages
@@ -443,39 +451,86 @@ fn send_to_ps2_controller_emulator(
         println!("Determining device type...");
     }
 
-    // TODO: Send one neutral, twenty-byte packet and check if the response
-    // is a valid motor state update or a "k" followed by several "x"es
+    // Send a twenty-byte, packet of a neutral controller state.
+    serial.write(&vec![
+        DUALSHOCK_MAGIC,
 
-    // Send one space character (this won't do anything on either type)
-    serial.write(&vec![0x20])?;
+        // Buttons (0=Pressed)
+        //┌─────────── Left
+        //│┌────────── Down
+        //││┌───────── Right
+        //│││┌──────── Up
+        //││││┌─────── [Start>
+        //│││││┌────── (R3)
+        //││││││┌───── (L3)
+        //│││││││┌──── [Select]
+        0b11111111u8,
+        0b11111111u8,
+        //│││││││└──── [L2]
+        //││││││└───── [R2]
+        //│││││└────── [L1]
+        //││││└─────── [R1]
+        //│││└──────── Triangle
+        //││└───────── Circle
+        //│└────────── Cross
+        //└─────────── Square
+
+        // Sticks
+        0x80, // Right stick X
+        0x80, // Right stick Y
+        0x80, // Left stick X
+        0x80, // Left stick Y
+
+        // Pressure
+        0x00, // Right
+        0x00, // Left
+        0x00, // Up
+        0x00, // Down
+        0x00, // Triangle
+        0x00, // Circle
+        0x00, // Cross
+        0x00, // Square
+        0x00, // [L1]
+        0x00, // [R1]
+        0x00, // [L2]
+        0x00, // [R2]
+
+        // Mode
+        0x55, // Normal
+    ])?;
 
     // Check the response!
     match serial.read(&mut response) {
-        Ok(read) => {
-            if read == 0 {
-                communication_mode = ControllerEmulatorPacketType::TwentyByte;
-                if verbose {
-                    println!("No response. I suspect this is Aaron Clovsky's work!");
-                }
-            }
-            if response[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
-                communication_mode = ControllerEmulatorPacketType::SevenByte;
+        Ok(_) => {
+            if response[0] == TWENTY_BYTE_OK_HEADER {
                 if verbose {
                     println!(
-                        "Response was '{}': this is probably Johnny Chung Lee's work!",
-                        SEVEN_BYTE_ERR_RESPONSE
+                        "Response began with '{}': this is probably Aaron Clovsky's work!",
+                        TWENTY_BYTE_OK_HEADER
                     );
                 }
+
+                communication_mode = ControllerEmulatorPacketType::TwentyByte;
+            } else if response[0] == (SEVEN_BYTE_OK_RESPONSE as u8) {
+                if verbose {
+                    println!(
+                        "Response began with '{}': this is probably Johnny Chung Lee's work!",
+                        SEVEN_BYTE_OK_RESPONSE
+                    );
+                }
+
+                communication_mode = ControllerEmulatorPacketType::SevenByte;
             } else {
                 println!("Unrecognised response: {:?}", response);
             }
         }
         Err(error) => {
             println!("failed reading from device '{}': {}", device_path, error);
-            // TODO: Make this actually detect rather than just fall back
-            communication_mode = ControllerEmulatorPacketType::TwentyByte;
         }
     };
+
+    // Clear the buffer again,
+    clear_serial_buffer(&mut serial);
 
     let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
 
@@ -646,41 +701,9 @@ fn send_to_ps2_controller_emulator(
                     }
                 }
             }
-            _ => ()
+            _ => (),
         };
     }
-
-    // let buf = vec!(
-    //     DUALSHOCK_MAGIC,
-
-    //     // Buttons (0=Pressed)
-    //     //┌─────────── Left
-    //     //│┌────────── Down
-    //     //││┌───────── Right
-    //     //│││┌──────── Up
-    //     //││││┌─────── [Start>
-    //     //│││││┌────── (R3)
-    //     //││││││┌───── (L3)
-    //     //│││││││┌──── [Select]
-    //     0b11111111u8,
-    //     0b11111111u8,
-    //     //│││││││└──── [L2]
-    //     //││││││└───── [R2]
-    //     //│││││└────── [L1]
-    //     //││││└─────── [R1]
-    //     //│││└──────── Triangle
-    //     //││└───────── Circle
-    //     //│└────────── Cross
-    //     //└─────────── Square
-
-    //     // Sticks
-    //     0x80, // Right stick X
-    //     0x80, // Right stick Y
-    //     0x80, // Left stick X
-    //     0x80, // Left stick Y
-    // );
-
-    // serial.write(&buf[..])?;
 
     Ok(())
 }
