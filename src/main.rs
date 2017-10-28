@@ -4,13 +4,23 @@ extern crate serial;
 extern crate clap;
 use serial::prelude::SerialPort;
 use std::io::prelude::{Read, Write};
+extern crate hex_view;
+use hex_view::HexView;
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
 
-static DUALSHOCK_MAGIC: u8 = 0x5A;
-static SEVEN_BYTE_OK_RESPONSE: char = 'k';
-static SEVEN_BYTE_ERR_RESPONSE: char = 'x';
+// The DualShock protocol uses 0x5A in many places!
+const DUALSHOCK_MAGIC: u8 = 0x5A;
+
+// Johnny Chung Lee's firmware responds with "k" on success,
+const SEVEN_BYTE_OK_RESPONSE: char = 'k';
+// and "x" when it recieves input it doesn't recognise.
+const SEVEN_BYTE_ERR_RESPONSE: char = 'x';
+
+// Aaron Clovsky's firmware responds with vibration information
+// which begins with the DUALSHOCK_MAGIC.
+const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
 enum ControllerEmulatorPacketType {
     None, // Fallback, just log messages
@@ -132,8 +142,18 @@ fn combine_trigger_axes(left: i16, right: i16) -> u8 {
     return convert_whole_axis(left - right);
 }
 
-
 fn controller_map_seven_byte(
+    controller: &sdl2::controller::GameController,
+    trigger_mode: &str,
+) -> Vec<u8> {
+    // Seven byte controller map is the same as
+    // the first seven bytes of the twenty-byte map!
+    let mut map = controller_map_twenty_byte(controller, trigger_mode);
+    map.truncate(7);
+    return map;
+}
+
+fn controller_map_twenty_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
 ) -> Vec<u8> {
@@ -171,6 +191,19 @@ fn controller_map_seven_byte(
     let left_stick_y_value =
         convert_whole_axis(controller.axis(Axis::LeftY) /*.saturating_mul(1.1)*/);
 
+    let pressure_right = convert_button(controller.button(Button::DPadRight));
+    let pressure_left = convert_button(controller.button(Button::DPadLeft));
+    let pressure_up = convert_button(controller.button(Button::DPadUp));
+    let pressure_down = convert_button(controller.button(Button::DPadDown));
+    let pressure_triangle = convert_button(controller.button(Button::Y));
+    let pressure_circle = convert_button(controller.button(Button::B));
+    let pressure_cross;
+    let pressure_square;
+    let pressure_l1 = convert_button(controller.button(Button::LeftShoulder));
+    let pressure_r1 = convert_button(controller.button(Button::RightShoulder));
+    let pressure_l2;
+    let pressure_r2;
+
     // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
 
     match trigger_mode {
@@ -205,6 +238,11 @@ fn controller_map_seven_byte(
         }
     }
 
+    pressure_l2 = l2_button_value;
+    pressure_r2 = r2_button_value;
+    pressure_cross = cross_value;
+    pressure_square = square_value;
+
     let buttons1 = vec![
         select_value,
         left_stick_value,
@@ -227,6 +265,11 @@ fn controller_map_seven_byte(
         square_value,
     ];
 
+    let mode_footer = match controller.button(Button::Guide) {
+        true => 0xAA,
+        false => 0x55,
+    };
+
     return vec![
         DUALSHOCK_MAGIC,
         collapse_bits(&buttons1).unwrap(),
@@ -235,7 +278,41 @@ fn controller_map_seven_byte(
         right_stick_y_value,
         left_stick_x_value,
         left_stick_y_value,
+        pressure_right,
+        pressure_left,
+        pressure_up,
+        pressure_down,
+        pressure_triangle,
+        pressure_circle,
+        pressure_cross,
+        pressure_square,
+        pressure_l1,
+        pressure_r1,
+        pressure_l2,
+        pressure_r2,
+        mode_footer,
     ];
+}
+
+fn clear_serial_buffer(serial: &mut SerialPort) {
+    // Create a response buffer
+    let mut response = vec![0; 1];
+
+    while {
+        match serial.read(&mut response) {
+            Err(error) => {
+                // "Operation timed out" means we've reached
+                // the end of the buffer, which is what we want!
+                if error.kind() != std::io::ErrorKind::TimedOut {
+                    panic!("Error clearing serial buffer: {}", error);
+                }
+
+                false
+            }
+            _ => true,
+        }
+    }
+    {}
 }
 
 fn send_to_ps2_controller_emulator(
@@ -269,59 +346,90 @@ fn send_to_ps2_controller_emulator(
     // Create a four-byte response buffer
     let mut response = vec![0; 4];
 
+    // The Teensy might be waiting to send bytes to a previous
+    // control session, if things didn't go so well.
+    // Let's make sure there's nothing left in that pipe!
     if verbose {
         println!("Clearing serial buffer...");
     }
 
-    // The Teensy might be waiting to send bytes to a previous
-    // control session, if things didn't go so well.
-    // Let's make sure there's nothing left in that pipe!
-    while {
-        match serial.read(&mut response) {
-            Err(error) => {
-                // "Operation timed out" means we've reached
-                // the end of the buffer, which is what we want!
-                if error.kind() != std::io::ErrorKind::TimedOut {
-                    panic!("Error clearing serial buffer: {}", error);
-                }
-
-                false
-            }
-            _ => true,
-        }
-    }
-    {
-        if verbose {
-            println!("Buffer received: {:?}", response);
-        }
-    }
+    clear_serial_buffer(&mut serial);
 
     if verbose {
         println!("Determining device type...");
     }
 
-    // Send one space character (this won't do anything on either type)
-    serial.write(&vec![0x20])?;
+    // Send a twenty-byte, packet of a neutral controller state.
+    serial.write(&vec![
+        DUALSHOCK_MAGIC,
+
+        // Buttons (0=Pressed)
+        //┌─────────── Left
+        //│┌────────── Down
+        //││┌───────── Right
+        //│││┌──────── Up
+        //││││┌─────── [Start>
+        //│││││┌────── (R3)
+        //││││││┌───── (L3)
+        //│││││││┌──── [Select]
+        0b11111111u8,
+        0b11111111u8,
+        //│││││││└──── [L2]
+        //││││││└───── [R2]
+        //│││││└────── [L1]
+        //││││└─────── [R1]
+        //│││└──────── Triangle
+        //││└───────── Circle
+        //│└────────── Cross
+        //└─────────── Square
+
+        // Sticks
+        0x80, // Right stick X
+        0x80, // Right stick Y
+        0x80, // Left stick X
+        0x80, // Left stick Y
+
+        // Pressure
+        0x00, // Right
+        0x00, // Left
+        0x00, // Up
+        0x00, // Down
+        0x00, // Triangle
+        0x00, // Circle
+        0x00, // Cross
+        0x00, // Square
+        0x00, // [L1]
+        0x00, // [R1]
+        0x00, // [L2]
+        0x00, // [R2]
+
+        // Mode
+        0x55, // Normal
+    ])?;
 
     // Check the response!
     match serial.read(&mut response) {
-        Ok(read) => {
-            if read == 0 {
-                communication_mode = ControllerEmulatorPacketType::TwentyByte;
-                if verbose {
-                    println!("No response. I suspect this is Aaron Clovsky's work!");
-                }
-            }
-            if response[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
-                communication_mode = ControllerEmulatorPacketType::SevenByte;
+        Ok(_) => {
+            if response[0] == TWENTY_BYTE_OK_HEADER {
                 if verbose {
                     println!(
-                        "Response was '{}': this is probably Johnny Chung Lee's work!",
+                        "Response began with '{}': this is probably Aaron Clovsky's work!",
+                        TWENTY_BYTE_OK_HEADER
+                    );
+                }
+
+                communication_mode = ControllerEmulatorPacketType::TwentyByte;
+            } else if response[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
+                if verbose {
+                    println!(
+                        "Response began with '{}': this is probably Johnny Chung Lee's work!",
                         SEVEN_BYTE_ERR_RESPONSE
                     );
                 }
+
+                communication_mode = ControllerEmulatorPacketType::SevenByte;
             } else {
-                println!("Unrecognised response: {:?}", response);
+                println!("Unrecognised response: {:x}", HexView::from(&response));
             }
         }
         Err(error) => {
@@ -329,160 +437,187 @@ fn send_to_ps2_controller_emulator(
         }
     };
 
+    // Clear the buffer again!
+    if verbose {
+        println!("Clearing serial buffer...");
+    }
+
+    clear_serial_buffer(&mut serial);
+
     let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
 
     if verbose {
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
-    for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
-        use sdl2::event::Event;
+    let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
-        match event {
-            Event::ControllerDeviceAdded { which, .. } => {
-                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
-                    true,
-                )
-                {
-                    match sdl_manager.add_controller(which as u32) {
-                        Ok(_) => {
+    'outer: loop {
+        // Wait for any events; but time out after 500ms
+        for event in event_pump.wait_timeout_iter(500) {
+            use sdl2::event::Event;
+
+            match event {
+                Event::ControllerDeviceAdded { which, .. } => {
+                    if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
+                        true,
+                    )
+                    {
+                        match sdl_manager.add_controller(which as u32) {
+                            Ok(_) => {
+                                println!(
+                                    "(There are {} controllers connected)",
+                                    sdl_manager.active_controllers.len()
+                                );
+                            }
+                            Err(error) => {
+                                println!(
+                                    "could not initialise connected joystick {}: {:?}",
+                                    which,
+                                    error
+                                )
+                            }
+                        };
+                    }
+                }
+
+                Event::ControllerDeviceRemoved { which, .. } => {
+                    match sdl_manager.remove_controller(which) {
+                        Some(_) => {
                             println!(
                                 "(There are {} controllers connected)",
                                 sdl_manager.active_controllers.len()
                             );
                         }
-                        Err(error) => {
-                            println!(
-                                "could not initialise connected joystick {}: {:?}",
-                                which,
-                                error
-                            )
-                        }
+                        None => (),
                     };
                 }
-            }
 
-            Event::ControllerDeviceRemoved { which, .. } => {
-                match sdl_manager.remove_controller(which) {
-                    Some(_) => {
-                        println!(
-                            "(There are {} controllers connected)",
-                            sdl_manager.active_controllers.len()
-                        );
-                    }
-                    None => (),
-                };
-            }
-
-            Event::ControllerAxisMotion { which, .. } |
-            Event::ControllerButtonDown { which, .. } |
-            Event::ControllerButtonUp { which, .. } => {
-                if which != 0 {
-                    continue;
-                }
-
-                let sent;
-                let mut bytes_received = 0;
-                let mut received = vec![0; 4];
-
-                match communication_mode {
-                    ControllerEmulatorPacketType::None => {
-                        sent = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
+                Event::ControllerAxisMotion { which, .. } |
+                Event::ControllerButtonDown { which, .. } |
+                Event::ControllerButtonUp { which, .. } => {
+                    if which != 0 {
+                        continue;
                     }
 
-                    ControllerEmulatorPacketType::SevenByte => {
-                        let state = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
+                    let sent;
+                    let mut bytes_received = 0;
+                    let mut received = vec![0; 4];
 
-                        serial.write_all(&state)?;
-                        bytes_received = match serial.read(&mut received) {
-                            Ok(bytes) => bytes,
-                            Err(error) => {
-                                if verbose {
-                                    println!("Error reading response: {}", error);
-                                }
-                                0
-                            }
-                        };
-
-                        if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
-                            println!("WARNING: Adapter responded with an error status.")
+                    match communication_mode {
+                        ControllerEmulatorPacketType::None => {
+                            sent = controller_map_twenty_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
                         }
 
-                        sent = state;
-                    }
+                        ControllerEmulatorPacketType::SevenByte => {
+                            let state = controller_map_seven_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
 
-                    ControllerEmulatorPacketType::TwentyByte => {
-                        let state = controller_map_seven_byte(
-                            &sdl_manager.active_controllers[&which].controller,
-                            trigger_mode,
-                        );
-
-                        serial.write_all(&state)?;
-                        bytes_received = match serial.read(&mut received) {
-                            Ok(bytes) => bytes,
-                            Err(error) => {
-                                if verbose {
-                                    println!("Error reading response: {}", error);
+                            serial.write_all(&state)?;
+                            bytes_received = match serial.read(&mut received) {
+                                Ok(bytes) => bytes,
+                                Err(error) => {
+                                    if verbose {
+                                        println!("Error reading response: {}", error);
+                                    }
+                                    0
                                 }
+                            };
 
-                                0
+                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                                println!("WARNING: Adapter responded with an error status.")
                             }
-                        };
 
-                        sent = state;
+                            sent = state;
+                        }
+
+                        ControllerEmulatorPacketType::TwentyByte => {
+                            let state = controller_map_twenty_byte(
+                                &sdl_manager.active_controllers[&which].controller,
+                                trigger_mode,
+                            );
+
+                            serial.write_all(&state)?;
+                            bytes_received = match serial.read(&mut received) {
+                                Ok(bytes) => bytes,
+                                Err(error) => {
+                                    if verbose {
+                                        println!("Error reading response: {}", error);
+                                    }
+
+                                    0
+                                }
+                            };
+
+                            sent = state;
+                        }
+                    };
+
+                    if verbose {
+                        println!("Sent: {:x}", HexView::from(&sent));
+
+                        if bytes_received > 0 {
+                            println!("Received: {:x}", HexView::from(&received));
+                        }
                     }
-                };
+                }
 
-                if verbose {
-                    println!("Sent: {:?}", sent);
-                    if bytes_received > 0 {
-                        println!("Received: {:?}", received);
+                Event::Quit { .. } => break 'outer,
+                _ => (),
+            }
+        }
+
+        // Timeout reached: If we're talking to a device that needs it,
+        // force an update, then continue to truck
+        match communication_mode {
+            ControllerEmulatorPacketType::TwentyByte => {
+                let controller_id = 0;
+
+                if sdl_manager.active_controllers.contains_key(&controller_id) {
+                    if verbose {
+                        println!("Sending update due to timeout");
+                    }
+
+                    let mut received = vec![0; 4];
+
+                    let state = controller_map_twenty_byte(
+                        &sdl_manager.active_controllers[&controller_id].controller,
+                        trigger_mode,
+                    );
+
+                    serial.write_all(&state)?;
+                    let bytes_received = match serial.read(&mut received) {
+                        Ok(bytes) => bytes,
+                        Err(error) => {
+                            if verbose {
+                                println!("Error reading response: {}", error);
+                            }
+
+                            0
+                        }
+                    };
+
+                    if verbose {
+                        println!("Sent: {:x}", HexView::from(&state));
+
+                        if bytes_received > 0 {
+                            println!("Received: {:x}", HexView::from(&received));
+                        }
+                    }
+                } else {
+                    if verbose {
+                        println!("Timed out but no controller is connected, so doing nothing.");
                     }
                 }
             }
-
-            Event::Quit { .. } => break,
             _ => (),
-        }
+        };
     }
-
-    // let buf = vec!(
-    //     DUALSHOCK_MAGIC,
-
-    //     // Buttons (0=Pressed)
-    //     //┌─────────── Left
-    //     //│┌────────── Down
-    //     //││┌───────── Right
-    //     //│││┌──────── Up
-    //     //││││┌─────── [Start>
-    //     //│││││┌────── (R3)
-    //     //││││││┌───── (L3)
-    //     //│││││││┌──── [Select]
-    //     0b11111111u8,
-    //     0b11111111u8,
-    //     //│││││││└──── [L2]
-    //     //││││││└───── [R2]
-    //     //│││││└────── [L1]
-    //     //││││└─────── [R1]
-    //     //│││└──────── Triangle
-    //     //││└───────── Circle
-    //     //│└────────── Cross
-    //     //└─────────── Square
-
-    //     // Sticks
-    //     0x80, // Right stick X
-    //     0x80, // Right stick Y
-    //     0x80, // Left stick X
-    //     0x80, // Left stick Y
-    // );
-
-    // serial.write(&buf[..])?;
 
     Ok(())
 }
