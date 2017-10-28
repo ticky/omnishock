@@ -344,13 +344,13 @@ fn send_to_ps2_controller_emulator(
     // Create a four-byte response buffer
     let mut response = vec![0; 4];
 
+    // The Teensy might be waiting to send bytes to a previous
+    // control session, if things didn't go so well.
+    // Let's make sure there's nothing left in that pipe!
     if verbose {
         println!("Clearing serial buffer...");
     }
 
-    // The Teensy might be waiting to send bytes to a previous
-    // control session, if things didn't go so well.
-    // Let's make sure there's nothing left in that pipe!
     clear_serial_buffer(&mut serial);
 
     if verbose {
@@ -417,11 +417,11 @@ fn send_to_ps2_controller_emulator(
                 }
 
                 communication_mode = ControllerEmulatorPacketType::TwentyByte;
-            } else if response[0] == (SEVEN_BYTE_OK_RESPONSE as u8) {
+            } else if response[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
                 if verbose {
                     println!(
                         "Response began with '{}': this is probably Johnny Chung Lee's work!",
-                        SEVEN_BYTE_OK_RESPONSE
+                        SEVEN_BYTE_ERR_RESPONSE
                     );
                 }
 
@@ -435,7 +435,11 @@ fn send_to_ps2_controller_emulator(
         }
     };
 
-    // Clear the buffer again,
+    // Clear the buffer again!
+    if verbose {
+        println!("Clearing serial buffer...");
+    }
+
     clear_serial_buffer(&mut serial);
 
     let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
@@ -523,7 +527,7 @@ fn send_to_ps2_controller_emulator(
                                 }
                             };
 
-                            if received[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
+                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
                                 println!("WARNING: Adapter responded with an error status.")
                             }
 
