@@ -4,6 +4,8 @@ extern crate serial;
 extern crate clap;
 use serial::prelude::SerialPort;
 use std::io::prelude::{Read, Write};
+extern crate hex_view;
+use hex_view::HexView;
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -427,7 +429,7 @@ fn send_to_ps2_controller_emulator(
 
                 communication_mode = ControllerEmulatorPacketType::SevenByte;
             } else {
-                println!("Unrecognised response: {:?}", response);
+                println!("Unrecognised response: {:x}", HexView::from(&response));
             }
         }
         Err(error) => {
@@ -557,9 +559,10 @@ fn send_to_ps2_controller_emulator(
                     };
 
                     if verbose {
-                        println!("Sent: {:?}", sent);
+                        println!("Sent: {:x}", HexView::from(&sent));
+
                         if bytes_received > 0 {
-                            println!("Received: {:?}", received);
+                            println!("Received: {:x}", HexView::from(&received));
                         }
                     }
                 }
@@ -600,9 +603,10 @@ fn send_to_ps2_controller_emulator(
                     };
 
                     if verbose {
-                        println!("Sent: {:?}", state);
+                        println!("Sent: {:x}", HexView::from(&state));
+
                         if bytes_received > 0 {
-                            println!("Received: {:?}", received);
+                            println!("Received: {:x}", HexView::from(&received));
                         }
                     }
                 } else {
