@@ -617,7 +617,7 @@ fn send_to_ps2_controller_emulator(
                                 }
                             };
 
-                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                            if received[0] == (SEVEN_BYTE_ERR_RESPONSE as u8) {
                                 println!("WARNING: Adapter responded with an error status.")
                             }
 
