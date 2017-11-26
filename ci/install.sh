@@ -12,15 +12,14 @@ main() {
             -O sdl2.tar.gz
         tar xzf \
             sdl2.tar.gz
-        pushd SDL2-* && \
+        cd SDL2-* && \
             ./configure \
                 --disable-audio \
                 --disable-video \
                 --disable-render \
                 --disable-power && \
             make && \
-            sudo make install && \
-            popd
+            sudo make install
     else
         target=x86_64-apple-darwin
         sort=gsort  # for `sort --sort-version`, from brew's coreutils.
