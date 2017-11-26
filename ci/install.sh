@@ -35,8 +35,7 @@ main() {
             ;;
     esac
 
-    # This fetches latest stable release
-    cargo install cross
+    cargo install --force cross
 }
 
 main
