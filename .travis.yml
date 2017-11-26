@@ -14,25 +14,16 @@ env:
 matrix:
   include:
     # macOS
-    - env: TARGET=i686-apple-darwin
-      os: osx
-      rust: 1.22.1
     - env: TARGET=x86_64-apple-darwin
       os: osx
       rust: 1.22.1
 
     # macOS (Stable)
-    - env: TARGET=i686-apple-darwin
-      os: osx
-      rust: stable
     - env: TARGET=x86_64-apple-darwin
       os: osx
       rust: stable
 
     # macOS (Beta)
-    - env: TARGET=i686-apple-darwin
-      os: osx
-      rust: beta
     - env: TARGET=x86_64-apple-darwin
       os: osx
       rust: beta
