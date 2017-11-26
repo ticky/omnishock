@@ -5,21 +5,6 @@ main() {
     if [ $TRAVIS_OS_NAME = linux ]; then
         target=x86_64-unknown-linux-musl
         sort=sort
-
-        # Install SDL2
-        wget \
-            https://www.libsdl.org/release/SDL2-2.0.6.tar.gz \
-            -O sdl2.tar.gz
-        tar xzf \
-            sdl2.tar.gz
-        cd SDL2-* && \
-            ./configure \
-                --disable-audio \
-                --disable-video \
-                --disable-render \
-                --disable-power && \
-            make && \
-            sudo make install
     else
         target=x86_64-apple-darwin
         sort=gsort  # for `sort --sort-version`, from brew's coreutils.
