@@ -9,18 +9,13 @@ environment:
   matrix:
     # Pinned Rust version
     - TARGET: i686-pc-windows-msvc
-    - TARGET: x86_64-pc-windows-msvc
 
     # Stable
     - TARGET: i686-pc-windows-msvc
       RUST_VERSION: stable
-    - TARGET: x86_64-pc-windows-msvc
-      RUST_VERSION: stable
 
     # Beta
     - TARGET: i686-pc-windows-msvc
-      RUST_VERSION: beta
-    - TARGET: x86_64-pc-windows-msvc
       RUST_VERSION: beta
 
 install:

@@ -3,6 +3,8 @@
 set -ex
 
 main() {
+    docker build -t sdl2-$TARGET:latest ci/$TARGET/Dockerfile
+
     cross build --target $TARGET
     cross build --target $TARGET --release
 
