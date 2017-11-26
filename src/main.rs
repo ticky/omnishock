@@ -51,19 +51,17 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("device")
+                        .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
                         .index(1)
                         .takes_value(true)
-                        .required(true)
-                        .help(
-                            &format!("Device to use to communcate.{}", SERIAL_HINT)
-                        ),
+                        .required(true),
                 )
                 .arg(
                     Arg::with_name("trigger-mode")
                         .long("trigger-mode")
                         .short("t")
-                        .takes_value(true)
                         .help("How to map the analog triggers")
+                        .takes_value(true)
                         .default_value("normal")
                         .possible_value("normal")
                         .possible_value("right-stick")
