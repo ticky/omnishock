@@ -25,6 +25,8 @@ main() {
         target=x86_64-apple-darwin
         sort=gsort  # for `sort --sort-version`, from brew's coreutils.
 
+        # Explicitly brew update to avoid a bug caused by how fucking hold Travis' Homebrew is
+        brew update
         # Install SDL2
         brew install sdl2
     fi
