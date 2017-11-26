@@ -1,25 +1,105 @@
+# Based on the "trust" template v0.1.1
+# https://github.com/japaric/trust/tree/v0.1.1
+
+dist: trusty
 language: rust
-cache: cargo
-rust:
-  - 1.22.1
-  - stable
-  - beta
-  - nightly
+services: docker
+sudo: required
+
+env:
+  global:
+    - PINNED_RUST_VERSION: 1.22.1
+    - CRATE_NAME: omnishock
+    - LD_LIBRARY_PATH: /usr/local/lib
+
 matrix:
-  allow_failures:
-    - rust: nightly
+  include:
+    # macOS
+    - env: TARGET=i686-apple-darwin
+      os: osx
+      rust: $PINNED_RUST_VERSION
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: $PINNED_RUST_VERSION
+
+    # macOS (Stable)
+    - env: TARGET=i686-apple-darwin
+      os: osx
+      rust: stable
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: stable
+
+    # macOS (Beta)
+    - env: TARGET=i686-apple-darwin
+      os: osx
+      rust: beta
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: beta
+
+    # Linux
+    - env: TARGET=arm-unknown-linux-gnueabi
+      rust: $PINNED_RUST_VERSION
+    - env: TARGET=armv7-unknown-linux-gnueabihf
+      rust: $PINNED_RUST_VERSION
+    - env: TARGET=i686-unknown-linux-gnu
+      rust: $PINNED_RUST_VERSION
+    - env: TARGET=x86_64-unknown-linux-gnu
+      rust: $PINNED_RUST_VERSION
+
+    # Linux (Stable)
+    - env: TARGET=arm-unknown-linux-gnueabi
+      rust: stable
+    - env: TARGET=armv7-unknown-linux-gnueabihf
+      rust: stable
+    - env: TARGET=i686-unknown-linux-gnu
+      rust: stable
+    - env: TARGET=x86_64-unknown-linux-gnu
+      rust: stable
+
+    # Linux (Beta)
+    - env: TARGET=arm-unknown-linux-gnueabi
+      rust: beta
+    - env: TARGET=armv7-unknown-linux-gnueabihf
+      rust: beta
+    - env: TARGET=i686-unknown-linux-gnu
+      rust: beta
+    - env: TARGET=x86_64-unknown-linux-gnu
+      rust: beta
+
+before_install:
+  - set -e
+  - rustup self update
+
+install:
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
+
 before_script:
   - export PATH="$PATH:$HOME/.cargo/bin"
   - which rustfmt || cargo install rustfmt
-install:
-  - wget https://www.libsdl.org/release/SDL2-2.0.6.tar.gz -O sdl2.tar.gz
-  - tar xzf sdl2.tar.gz
-  - pushd SDL2-* && ./configure --disable-audio --disable-video --disable-render --disable-power && make && sudo make install && popd
+
 script:
-- |
-  cargo fmt -- --write-mode=diff &&
-  cargo build --verbose &&
-  cargo test --verbose
-env:
-  global:
-  - LD_LIBRARY_PATH: "/usr/local/lib"
+  - bash ci/script.sh
+
+after_script: set +e
+
+before_deploy:
+  - sh ci/before_deploy.sh
+
+deploy:
+  api_key:
+    secure: klokHwp+eSfie7Arf0qgwMHyhwE9SWM9F2KKN+YT2lwdXD2V6ur/819A+kSabyUf7Nnv65uUicF0jAqv2sVZGxOGc0VEXMf5pb9Sz4JXsEOWoIQfOXZ/ewCLGtCkPZI0J35WPfZV1e/Ucu8nqVfpPMVzr8ckcd/78/I08GogdTZ/El4EVvaVGZEIujRtjbYj6B4y0q0SWpdg/nI8upzzSDsfHzGnAy6O+Xz/G2eK+lbCRmrehRYYLAbFhHQY8LHkNaDTyfsq3ylVqlUwCXrEAEB5TxbU7acUbQzdAS/U1yMYwnIWPDL4VoJEPCJpBlnM0fxYE5HVFIJAwrXu8EDjwbmiK9RfsyNewSWj0aup44yLYIWPcGWzRK69cr06fXnc+y1hPu4+F9RVm5FSlOryg4OL9Rx6rEmicaJ7EpYpgCz0Au5NrL38ykSWgk+9nry7zffPvrzlR1n37vbJujpl+TjsGHH5VVui879EyEShuo3zJ4+x2it4uevuuypWssHENagtKc8tPyhzu/JREjav0NXiUcfAzniGmAUyJSz0oo8JdRabhx6c8rhXXD9WayusbaE6KZWuS9SSd5Qc2wuYQJ4MSVaiLmQciVsXvPzyu64tvtP7t39sSupaGiJuH1jR7gULvZ1frKPjFt89O3oeoot+55ljDjEcGGVEdDSE8HA=
+  file_glob: true
+  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
+  on:
+    condition: $TRAVIS_RUST_VERSION = $PINNED_RUST_VERSION
+    tags: true
+  provider: releases
+  skip_cleanup: true
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
