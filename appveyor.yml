@@ -36,6 +36,7 @@ install:
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
   - rustc -Vv
   - cargo -V
+  - ps: ci\install.ps1
 
 test_script:
   - if [%APPVEYOR_REPO_TAG%]==[false] (
