@@ -8,7 +8,6 @@ sudo: required
 
 env:
   global:
-    - PINNED_RUST_VERSION: 1.22.1
     - CRATE_NAME: omnishock
     - LD_LIBRARY_PATH: /usr/local/lib
 
@@ -17,10 +16,10 @@ matrix:
     # macOS
     - env: TARGET=i686-apple-darwin
       os: osx
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
     - env: TARGET=x86_64-apple-darwin
       os: osx
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
 
     # macOS (Stable)
     - env: TARGET=i686-apple-darwin
@@ -40,13 +39,13 @@ matrix:
 
     # Linux
     - env: TARGET=arm-unknown-linux-gnueabi
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
     - env: TARGET=armv7-unknown-linux-gnueabihf
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
     - env: TARGET=i686-unknown-linux-gnu
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
     - env: TARGET=x86_64-unknown-linux-gnu
-      rust: $PINNED_RUST_VERSION
+      rust: 1.22.1
 
     # Linux (Stable)
     - env: TARGET=arm-unknown-linux-gnueabi
@@ -94,7 +93,7 @@ deploy:
   file_glob: true
   file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
   on:
-    condition: $TRAVIS_RUST_VERSION = $PINNED_RUST_VERSION
+    condition: $TRAVIS_RUST_VERSION = 1.22.1
     tags: true
   provider: releases
   skip_cleanup: true
