@@ -3,7 +3,9 @@
 set -ex
 
 main() {
-    docker build -t sdl2-$TARGET:latest ci/$TARGET/Dockerfile
+    if [ $TRAVIS_OS_NAME = linux ]; then
+        docker build -t sdl2-$TARGET:latest ci/$TARGET/Dockerfile
+    fi
 
     cross build --target $TARGET
     cross build --target $TARGET --release
