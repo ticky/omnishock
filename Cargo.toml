@@ -1,6 +1,6 @@
 [package]
 name = "omnishock"
-version = "0.0.5"
+version = "0.0.6"
 description = "Something to do with game controllers!"
 authors = [ "Jessica Stokes <hello@jessicastokes.net>" ]
 repository = "https://github.com/ticky/omnishock.git"
