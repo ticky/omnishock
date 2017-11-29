@@ -121,7 +121,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "omnishock"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "clap 2.26.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex-view 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
