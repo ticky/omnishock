@@ -1,6 +1,6 @@
 # 🎮 Omnishock
 
-[![Build Status](https://travis-ci.org/ticky/omnishock.svg?branch=master)](https://travis-ci.org/ticky/omnishock)
+[![Travis CI Build Status](https://travis-ci.org/ticky/omnishock.svg?branch=develop)](https://travis-ci.org/ticky/omnishock) [![Appveyor Build status](https://ci.appveyor.com/api/projects/status/9m0lyp0wy8djud7t/branch/develop?svg=true)](https://ci.appveyor.com/project/ticky/omnishock/branch/develop)
 
 Something to do with game controllers!
 

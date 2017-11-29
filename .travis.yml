@@ -1,25 +1,94 @@
+# Based on the "trust" template v0.1.1
+# https://github.com/japaric/trust/tree/v0.1.1
+
+dist: trusty
 language: rust
-cache: cargo
-rust:
-  - 1.20.0
-  - stable
-  - beta
-  - nightly
+services: docker
+sudo: required
+
+# Bump macOS images to a new one because waiting for Homebrew to
+# install an acceptable version of Ruby is horrible
+osx_image: xcode9.1
+
+env:
+  global:
+    - CRATE_NAME: omnishock
+    - LD_LIBRARY_PATH: /usr/local/lib
+
 matrix:
-  allow_failures:
-    - rust: nightly
+  include:
+    # macOS
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: 1.22.1
+
+    # macOS (Stable)
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: stable
+
+    # macOS (Beta)
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
+      rust: beta
+
+    # No Linux builds until https://github.com/japaric/cross/issues/149 is fixed
+    # # Linux
+    # - env: TARGET=x86_64-unknown-linux-gnu
+    #   rust: 1.22.1
+    # - env: TARGET=armv7-unknown-linux-gnueabihf
+    #   rust: 1.22.1
+
+    # # Linux (Stable)
+    # - env: TARGET=x86_64-unknown-linux-gnu
+    #   rust: stable
+    # - env: TARGET=armv7-unknown-linux-gnueabihf
+    #   rust: stable
+
+    # # Linux (Beta)
+    # - env: TARGET=x86_64-unknown-linux-gnu
+    #   rust: beta
+    # - env: TARGET=armv7-unknown-linux-gnueabihf
+    #   rust: beta
+
+before_install:
+  - set -e
+  - rustup self update
+
+install:
+  - sh ci/install.sh
+  - source ~/.cargo/env || true
+
 before_script:
   - export PATH="$PATH:$HOME/.cargo/bin"
   - which rustfmt || cargo install rustfmt
-install:
-  - wget https://www.libsdl.org/release/SDL2-2.0.6.tar.gz -O sdl2.tar.gz
-  - tar xzf sdl2.tar.gz
-  - pushd SDL2-* && ./configure --disable-audio --disable-video --disable-render --disable-power && make && sudo make install && popd
+
 script:
-- |
-  cargo fmt -- --write-mode=diff &&
-  cargo build &&
-  cargo test
-env:
-  global:
-  - LD_LIBRARY_PATH: "/usr/local/lib"
+  - bash ci/script.sh
+
+after_script: set +e
+
+before_deploy:
+  - sh ci/before_deploy.sh
+
+deploy:
+  api_key:
+    secure: klokHwp+eSfie7Arf0qgwMHyhwE9SWM9F2KKN+YT2lwdXD2V6ur/819A+kSabyUf7Nnv65uUicF0jAqv2sVZGxOGc0VEXMf5pb9Sz4JXsEOWoIQfOXZ/ewCLGtCkPZI0J35WPfZV1e/Ucu8nqVfpPMVzr8ckcd/78/I08GogdTZ/El4EVvaVGZEIujRtjbYj6B4y0q0SWpdg/nI8upzzSDsfHzGnAy6O+Xz/G2eK+lbCRmrehRYYLAbFhHQY8LHkNaDTyfsq3ylVqlUwCXrEAEB5TxbU7acUbQzdAS/U1yMYwnIWPDL4VoJEPCJpBlnM0fxYE5HVFIJAwrXu8EDjwbmiK9RfsyNewSWj0aup44yLYIWPcGWzRK69cr06fXnc+y1hPu4+F9RVm5FSlOryg4OL9Rx6rEmicaJ7EpYpgCz0Au5NrL38ykSWgk+9nry7zffPvrzlR1n37vbJujpl+TjsGHH5VVui879EyEShuo3zJ4+x2it4uevuuypWssHENagtKc8tPyhzu/JREjav0NXiUcfAzniGmAUyJSz0oo8JdRabhx6c8rhXXD9WayusbaE6KZWuS9SSd5Qc2wuYQJ4MSVaiLmQciVsXvPzyu64tvtP7t39sSupaGiJuH1jR7gULvZ1frKPjFt89O3oeoot+55ljDjEcGGVEdDSE8HA=
+  file_glob: true
+  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
+  on:
+    condition: $TRAVIS_RUST_VERSION = 1.22.1
+    tags: true
+  provider: releases
+  skip_cleanup: true
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+branches:
+  only:
+    # release tags
+    - /^v\d+\.\d+\.\d+.*$/
+    - develop

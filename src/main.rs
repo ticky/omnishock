@@ -22,6 +22,14 @@ const SEVEN_BYTE_ERR_RESPONSE: char = 'x';
 // which begins with the DUALSHOCK_MAGIC.
 const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
+// Serial port name hint is different per-OS
+#[cfg(target_os = "macos")]
+const SERIAL_HINT: &'static str = "\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
+#[cfg(all(unix, not(target_os = "macos")))]
+const SERIAL_HINT: &'static str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
+#[cfg(windows)]
+const SERIAL_HINT: &'static str = "\n(Usually COM3 for USB Serial on Windows.)";
+
 enum ControllerEmulatorPacketType {
     None, // Fallback, just log messages
     SevenByte, // For Johnny Chung Lee's firmware
@@ -43,20 +51,17 @@ fn main() {
                 )
                 .arg(
                     Arg::with_name("device")
+                        .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
                         .index(1)
                         .takes_value(true)
-                        .required(true)
-                        .help(
-                            "Device to use to communcate.\n\
-                             (Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)",
-                        ),
+                        .required(true),
                 )
                 .arg(
                     Arg::with_name("trigger-mode")
                         .long("trigger-mode")
                         .short("t")
-                        .takes_value(true)
                         .help("How to map the analog triggers")
+                        .takes_value(true)
                         .default_value("normal")
                         .possible_value("normal")
                         .possible_value("right-stick")
