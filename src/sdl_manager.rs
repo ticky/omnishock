@@ -32,15 +32,21 @@ pub struct ControllerManager {
 
 pub struct SDLManager {
     pub context: sdl2::Sdl,
-    pub game_controller_subsystem: sdl2::GameControllerSubsystem,
+    pub video_subsystem: sdl2::VideoSubsystem,
     pub haptic_subsystem: sdl2::HapticSubsystem,
+    pub game_controller_subsystem: sdl2::GameControllerSubsystem,
     pub active_controllers: HashMap<i32, ControllerManager>,
 }
 
 impl SDLManager {
     pub fn init() -> SDLManager {
-        // Initialise SDL2, plus the haptic and game controller subsystems
+        // Initialise SDL2, plus the video, haptic & game controller subsystems
         let context = sdl2::init().unwrap();
+        /* NOTE: The video subsystem is not currently used, except for the side
+         *       effect that it prevents the system from triggering the screen
+         *       saver. It will, however, be used to provide a window for focus
+         *       in future. */
+        let video_subsystem = context.video().unwrap();
         let haptic_subsystem = context.haptic().unwrap();
         let game_controller_subsystem = context.game_controller().unwrap();
 
@@ -49,8 +55,9 @@ impl SDLManager {
 
         let mut sdl_manager = SDLManager {
             context,
-            game_controller_subsystem,
+            video_subsystem,
             haptic_subsystem,
+            game_controller_subsystem,
             active_controllers,
         };
 
