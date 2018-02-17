@@ -60,9 +60,9 @@ install:
   - source ~/.cargo/env || true
 
 before_script:
-  - export PATH="$PATH:$HOME/.cargo/bin"
-  - rustup component add rustfmt-preview
-  - which rustfmt || cargo install --force rustfmt
+  - rustup toolchain install nightly
+  - rustup component add --toolchain nightly rustfmt-preview
+  - which rustfmt || cargo install --force rustfmt-nightly
 
 script:
   - bash ci/script.sh

@@ -10,7 +10,7 @@ main() {
     cross build --target $TARGET
     cross build --target $TARGET --release
 
-    cargo fmt -- --write-mode=diff
+    cargo +nightly fmt --all -- --write-mode=diff
 
     if [ ! -z $DISABLE_TESTS ]; then
         return
