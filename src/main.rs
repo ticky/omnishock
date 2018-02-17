@@ -18,10 +18,10 @@
  * along with Omnishock.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-extern crate sdl2;
-extern crate serial;
 #[macro_use]
 extern crate clap;
+extern crate sdl2;
+extern crate serial;
 use serial::prelude::SerialPort;
 use std::io::prelude::{Read, Write};
 extern crate hex_view;
@@ -51,8 +51,8 @@ const SERIAL_HINT: &'static str = "\n(Usually /dev/ttyUSB0 for USB Serial on Uni
 const SERIAL_HINT: &'static str = "\n(Usually COM3 for USB Serial on Windows.)";
 
 enum ControllerEmulatorPacketType {
-    None, // Fallback, just log messages
-    SevenByte, // For Johnny Chung Lee's firmware
+    None,       // Fallback, just log messages
+    SevenByte,  // For Johnny Chung Lee's firmware
     TwentyByte, // For Aaron Clovsky's firmware
 }
 
@@ -61,14 +61,15 @@ fn main() {
 
     let arguments = app_from_crate!()
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg(Arg::with_name("verbose").long("verbose").short("v").help(
-            "Print more information about activity",
-        ))
+        .arg(
+            Arg::with_name("verbose")
+                .long("verbose")
+                .short("v")
+                .help("Print more information about activity"),
+        )
         .subcommand(
             SubCommand::with_name("ps2ce")
-                .about(
-                    "Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator",
-                )
+                .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
                 .arg(
                     Arg::with_name("device")
                         .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
@@ -88,9 +89,7 @@ fn main() {
                         .possible_value("cross-and-square"),
                 ),
         )
-        .subcommand(SubCommand::with_name("test").about(
-            "Tests the game controller subsystem",
-        ))
+        .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
     let mut sdl_manager = SDLManager::init();
@@ -336,8 +335,7 @@ fn clear_serial_buffer(serial: &mut SerialPort) {
             }
             _ => true,
         }
-    }
-    {}
+    } {}
 }
 
 fn send_to_ps2_controller_emulator(
@@ -387,7 +385,6 @@ fn send_to_ps2_controller_emulator(
     // Send a twenty-byte, packet of a neutral controller state.
     serial.write(&vec![
         DUALSHOCK_MAGIC,
-
         // Buttons (0=Pressed)
         //┌─────────── Left
         //│┌────────── Down
@@ -413,7 +410,6 @@ fn send_to_ps2_controller_emulator(
         0x80, // Right stick Y
         0x80, // Left stick X
         0x80, // Left stick Y
-
         // Pressure
         0x00, // Right
         0x00, // Left
@@ -427,7 +423,6 @@ fn send_to_ps2_controller_emulator(
         0x00, // [R1]
         0x00, // [L2]
         0x00, // [R2]
-
         // Mode
         0x55, // Normal
     ])?;
@@ -484,9 +479,10 @@ fn send_to_ps2_controller_emulator(
 
             match event {
                 Event::ControllerDeviceAdded { which, .. } => {
-                    if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
-                        true,
-                    )
+                    if !sdl_manager
+                        .has_controller(which as u32)
+                        .ok()
+                        .unwrap_or(true)
                     {
                         match sdl_manager.add_controller(which as u32) {
                             Ok(_) => {
@@ -495,13 +491,10 @@ fn send_to_ps2_controller_emulator(
                                     sdl_manager.active_controllers.len()
                                 );
                             }
-                            Err(error) => {
-                                println!(
-                                    "could not initialise connected joystick {}: {:?}",
-                                    which,
-                                    error
-                                )
-                            }
+                            Err(error) => println!(
+                                "could not initialise connected joystick {}: {:?}",
+                                which, error
+                            ),
                         };
                     }
                 }
@@ -518,9 +511,9 @@ fn send_to_ps2_controller_emulator(
                     };
                 }
 
-                Event::ControllerAxisMotion { which, .. } |
-                Event::ControllerButtonDown { which, .. } |
-                Event::ControllerButtonUp { which, .. } => {
+                Event::ControllerAxisMotion { which, .. }
+                | Event::ControllerButtonDown { which, .. }
+                | Event::ControllerButtonUp { which, .. } => {
                     if which != 0 {
                         continue;
                     }
@@ -655,9 +648,10 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
-                if !sdl_manager.has_controller(which as u32).ok().unwrap_or(
-                    true,
-                )
+                if !sdl_manager
+                    .has_controller(which as u32)
+                    .ok()
+                    .unwrap_or(true)
                 {
                     match sdl_manager.add_controller(which as u32) {
                         Ok(_) => {
@@ -666,13 +660,10 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                                 sdl_manager.active_controllers.len()
                             );
                         }
-                        Err(error) => {
-                            println!(
-                                "could not initialise connected joystick {}: {:?}",
-                                which,
-                                error
-                            )
-                        }
+                        Err(error) => println!(
+                            "could not initialise connected joystick {}: {:?}",
+                            which, error
+                        ),
                     };
                 }
             }
@@ -689,7 +680,9 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                 };
             }
 
-            Event::ControllerAxisMotion { which, axis, value, .. } => {
+            Event::ControllerAxisMotion {
+                which, axis, value, ..
+            } => {
                 println!(
                     "“{}” (#{}): {:?}: {}",
                     sdl_manager.active_controllers[&which].controller.name(),
@@ -699,19 +692,17 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                 );
 
                 match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller_manager) => {
-                        match controller_manager.haptic {
-                            Some(ref mut haptic) => {
-                                println!(
-                                    "Running haptic feedback for “{}”",
-                                    controller_manager.controller.name()
-                                );
-                                haptic.rumble_stop();
-                                haptic.rumble_play(1.0, 500);
-                            }
-                            _ => (),
+                    Some(controller_manager) => match controller_manager.haptic {
+                        Some(ref mut haptic) => {
+                            println!(
+                                "Running haptic feedback for “{}”",
+                                controller_manager.controller.name()
+                            );
+                            haptic.rumble_stop();
+                            haptic.rumble_play(1.0, 500);
                         }
-                    }
+                        _ => (),
+                    },
                     _ => (),
                 };
             }

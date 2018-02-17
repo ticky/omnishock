@@ -96,8 +96,7 @@ impl SDLManager {
                 Err(error) => {
                     println!(
                         "Note: joystick {} can't be used as a controller: {}",
-                        index,
-                        error
+                        index, error
                     );
                 }
             };
@@ -124,10 +123,8 @@ impl SDLManager {
 
         let controller_manager = ControllerManager { controller, haptic };
 
-        self.active_controllers.insert(
-            controller_id,
-            controller_manager,
-        );
+        self.active_controllers
+            .insert(controller_id, controller_manager);
         Ok(controller_id)
     }
 
@@ -152,9 +149,8 @@ impl SDLManager {
 
     pub fn has_controller(&self, index: u32) -> Result<bool, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
-        return Ok(self.active_controllers.contains_key(
-            &controller.instance_id(),
-        ));
+        return Ok(self.active_controllers
+            .contains_key(&controller.instance_id()));
     }
 
     pub fn remove_controller(&mut self, id: i32) -> Option<ControllerManager> {
