@@ -105,9 +105,7 @@ impl SDLManager {
 
     fn insert_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
         let controller = self.game_controller_subsystem.open(index)?;
-        let haptic = self.haptic_subsystem
-            .open_from_joystick_id(index)
-            .ok();
+        let haptic = self.haptic_subsystem.open_from_joystick_id(index).ok();
         let controller_id = controller.instance_id();
 
         match haptic {
