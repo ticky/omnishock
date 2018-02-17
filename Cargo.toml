@@ -5,7 +5,7 @@ description = "Something to do with game controllers!"
 authors = [ "Jessica Stokes <hello@jessicastokes.net>" ]
 repository = "https://github.com/ticky/omnishock.git"
 homepage = "https://github.com/ticky/omnishock"
-license = "MIT"
+license = "GPL-3.0-or-later"
 readme = "README.md"
 
 [dependencies]
