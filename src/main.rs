@@ -480,11 +480,11 @@ fn send_to_ps2_controller_emulator(
             match event {
                 Event::ControllerDeviceAdded { which, .. } => {
                     if !sdl_manager
-                        .has_controller(which as u32)
+                        .has_controller(which)
                         .ok()
                         .unwrap_or(true)
                     {
-                        match sdl_manager.add_controller(which as u32) {
+                        match sdl_manager.add_controller(which) {
                             Ok(_) => {
                                 println!(
                                     "(There are {} controllers connected)",
@@ -649,11 +649,11 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
                 if !sdl_manager
-                    .has_controller(which as u32)
+                    .has_controller(which)
                     .ok()
                     .unwrap_or(true)
                 {
-                    match sdl_manager.add_controller(which as u32) {
+                    match sdl_manager.add_controller(which) {
                         Ok(_) => {
                             println!(
                                 "(There are {} controllers connected)",
