@@ -24,10 +24,14 @@ extern crate coord_transforms;
 extern crate hex_view;
 use hex_view::HexView;
 extern crate nalgebra;
+extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
+use std::convert::From;
+use std::cmp::PartialOrd;
 use std::io::prelude::{Read, Write};
+use std::ops::{Add, Div};
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -114,19 +118,23 @@ fn main() {
 
 // Misty gave me a special license exception for this stanza
 // <https://twitter.com/mistydemeo/status/914745750369714176>
-fn collapse_bits(bytes: &[u8]) -> Result<u8, String> {
-    if !bytes.len() == 8 {
+fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
+    items: &[T],
+) -> Result<u8, String> {
+    let mid_point = whats_the_midpoint_of_a::<T>();
+
+    if !items.len() == 8 {
         return Err(format!(
-            "Input must be 8 bytes long ({} elements provided)",
-            bytes.len()
+            "Input must be 8 items long ({} provided)",
+            items.len()
         ));
     }
     let mut result = 0;
-    for (i, byte) in bytes.iter().enumerate() {
+    for (i, byte) in items.iter().enumerate() {
         let mask = (1 as u8) << i;
 
         // Are we setting this bit to 0 or 1?
-        if *byte <= 0x80 {
+        if *byte <= mid_point {
             result |= mask;
         } else {
             result &= !mask;
@@ -135,10 +143,14 @@ fn collapse_bits(bytes: &[u8]) -> Result<u8, String> {
     return Ok(result);
 }
 
-fn convert_button(button: bool) -> u8 {
+fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
+    return (T::max_value() + T::min_value()) / T::from(2);
+}
+
+fn convert_button<T: num::Bounded>(button: bool) -> T {
     return match button {
-        true => 0xFF,
-        false => 0x00,
+        true => T::max_value(),
+        false => T::min_value(),
     };
 }
 
@@ -188,22 +200,22 @@ fn controller_map_twenty_byte(
     let raw_right_stick_y = controller.axis(Axis::RightY);
 
     // buttons1
-    let select_value = convert_button(controller.button(Button::Back));
-    let left_stick_value = convert_button(controller.button(Button::LeftStick));
-    let right_stick_value = convert_button(controller.button(Button::RightStick));
-    let start_value = convert_button(controller.button(Button::Start));
-    let dpad_up_value = convert_button(controller.button(Button::DPadUp));
-    let dpad_right_value = convert_button(controller.button(Button::DPadRight));
-    let dpad_down_value = convert_button(controller.button(Button::DPadDown));
-    let dpad_left_value = convert_button(controller.button(Button::DPadLeft));
+    let select_value = convert_button::<u8>(controller.button(Button::Back));
+    let left_stick_value = convert_button::<u8>(controller.button(Button::LeftStick));
+    let right_stick_value = convert_button::<u8>(controller.button(Button::RightStick));
+    let start_value = convert_button::<u8>(controller.button(Button::Start));
+    let dpad_up_value = convert_button::<u8>(controller.button(Button::DPadUp));
+    let dpad_right_value = convert_button::<u8>(controller.button(Button::DPadRight));
+    let dpad_down_value = convert_button::<u8>(controller.button(Button::DPadDown));
+    let dpad_left_value = convert_button::<u8>(controller.button(Button::DPadLeft));
 
     // buttons2
     let l2_button_value;
     let r2_button_value;
-    let l1_button_value = convert_button(controller.button(Button::LeftShoulder));
-    let r1_button_value = convert_button(controller.button(Button::RightShoulder));
-    let triangle_value = convert_button(controller.button(Button::Y));
-    let circle_value = convert_button(controller.button(Button::B));
+    let l1_button_value = convert_button::<u8>(controller.button(Button::LeftShoulder));
+    let r1_button_value = convert_button::<u8>(controller.button(Button::RightShoulder));
+    let triangle_value = convert_button::<u8>(controller.button(Button::Y));
+    let circle_value = convert_button::<u8>(controller.button(Button::B));
     let cross_value;
     let square_value;
 
@@ -713,5 +725,29 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::Quit { .. } => break,
             _ => (),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn whats_the_midpoint_of_a_is_accurate() {
+        use super::whats_the_midpoint_of_a;
+
+        assert_eq!(whats_the_midpoint_of_a::<u8>(), 127_u8);
+        assert_eq!(
+            whats_the_midpoint_of_a::<u64>(),
+            9_223_372_036_854_775_807_u64
+        );
+        assert_eq!(whats_the_midpoint_of_a::<i16>(), 0_i16);
+        assert_eq!(whats_the_midpoint_of_a::<i64>(), 0_i64);
+        assert_eq!(whats_the_midpoint_of_a::<f32>(), 0_f32);
+    }
+
+    #[test]
+    fn convert_button_is_accurate() {
+        use super::convert_button;
+
+        assert_eq!(convert_button::<u8>(true), 255_u8);
     }
 }
