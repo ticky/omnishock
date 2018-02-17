@@ -20,12 +20,14 @@
 
 #[macro_use]
 extern crate clap;
+extern crate coord_transforms;
+extern crate hex_view;
+use hex_view::HexView;
+extern crate nalgebra;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
 use std::io::prelude::{Read, Write};
-extern crate hex_view;
-use hex_view::HexView;
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -133,8 +135,6 @@ fn collapse_bits(bytes: &[u8]) -> Result<u8, String> {
     return Ok(result);
 }
 
-// Corner point for DualShock2: 0.835, Xbox One: 0.764
-
 fn convert_button(button: bool) -> u8 {
     return match button {
         true => 0xFF,
@@ -207,13 +207,10 @@ fn controller_map_twenty_byte(
     let cross_value;
     let square_value;
 
-    let right_stick_x_value =
-        convert_whole_axis(controller.axis(Axis::RightX) /*.saturating_mul(1.1)*/);
-    let right_stick_y_value;
-    let left_stick_x_value =
-        convert_whole_axis(controller.axis(Axis::LeftX) /*.saturating_mul(1.1)*/);
-    let left_stick_y_value =
-        convert_whole_axis(controller.axis(Axis::LeftY) /*.saturating_mul(1.1)*/);
+    let mut right_stick_x_value = convert_whole_axis(controller.axis(Axis::RightX));
+    let mut right_stick_y_value;
+    let mut left_stick_x_value = convert_whole_axis(controller.axis(Axis::LeftX));
+    let mut left_stick_y_value = convert_whole_axis(controller.axis(Axis::LeftY));
 
     let pressure_right = convert_button(controller.button(Button::DPadRight));
     let pressure_left = convert_button(controller.button(Button::DPadLeft));
@@ -227,8 +224,6 @@ fn controller_map_twenty_byte(
     let pressure_r1 = convert_button(controller.button(Button::RightShoulder));
     let pressure_l2;
     let pressure_r2;
-
-    // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
 
     match trigger_mode {
         "right-stick" => {
@@ -247,8 +242,7 @@ fn controller_map_twenty_byte(
             cross_value = convert_half_axis_positive(raw_right_trigger);
             square_value = convert_half_axis_positive(raw_left_trigger);
 
-            right_stick_y_value =
-                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
+            right_stick_y_value = convert_whole_axis(raw_right_stick_y);
         }
         _ => {
             l2_button_value = convert_half_axis_positive(raw_left_trigger);
@@ -257,8 +251,7 @@ fn controller_map_twenty_byte(
             cross_value = convert_button(controller.button(Button::A));
             square_value = convert_button(controller.button(Button::X));
 
-            right_stick_y_value =
-                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
+            right_stick_y_value = convert_whole_axis(raw_right_stick_y);
         }
     }
 
