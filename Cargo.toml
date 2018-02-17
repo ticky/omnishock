@@ -9,8 +9,8 @@ license = "GPL-3.0-or-later"
 readme = "README.md"
 
 [dependencies]
-clap = "2.26.2"
-hex-view = "0.1.1"
+clap = "2.30.0"
+hex-view = "0.1.2"
 sdl2 = "0.31.0"
 serial = "0.4"
 
