@@ -20,7 +20,7 @@ matrix:
     # macOS
     - env: TARGET=x86_64-apple-darwin
       os: osx
-      rust: 1.22.1
+      rust: 1.24.0
 
     # macOS (Stable)
     - env: TARGET=x86_64-apple-darwin
@@ -35,9 +35,9 @@ matrix:
     # No Linux builds until https://github.com/japaric/cross/issues/149 is fixed
     # # Linux
     # - env: TARGET=x86_64-unknown-linux-gnu
-    #   rust: 1.22.1
+    #   rust: 1.24.0
     # - env: TARGET=armv7-unknown-linux-gnueabihf
-    #   rust: 1.22.1
+    #   rust: 1.24.0
 
     # # Linux (Stable)
     # - env: TARGET=x86_64-unknown-linux-gnu
@@ -78,7 +78,7 @@ deploy:
   file_glob: true
   file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
   on:
-    condition: $TRAVIS_RUST_VERSION = 1.22.1
+    condition: $TRAVIS_RUST_VERSION = 1.24.0
     tags: true
   provider: releases
   skip_cleanup: true

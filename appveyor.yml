@@ -3,7 +3,7 @@
 
 environment:
   global:
-    RUST_VERSION: 1.22.1
+    RUST_VERSION: 1.24.0
     CRATE_NAME: omnishock
 
   matrix:
@@ -51,7 +51,7 @@ deploy:
     secure: XKtvMHdIvSH3y/wp2OhNiZRvW1BXoR+XlOmgSFszBgDdJdxHPAzgFcWVdHz1lfOw
   description: ''
   on:
-    RUST_VERSION: 1.22.1
+    RUST_VERSION: 1.24.0
     appveyor_repo_tag: true
   provider: GitHub
 
