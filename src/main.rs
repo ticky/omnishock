@@ -247,7 +247,7 @@ fn controller_map_twenty_byte(
 
             right_stick_y_value = convert_whole_axis(raw_right_stick_y);
         }
-        _ => ()
+        _ => (),
     }
 
     let pressure_right = convert_button::<u8>(controller.button(Button::DPadRight));
@@ -728,12 +728,27 @@ mod tests {
     fn collapse_bits_works() {
         use super::collapse_bits;
 
-        assert_eq!(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap(), 0);
-        assert_eq!(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap(), 0b01000101u8);
-        assert_eq!(!(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap()), 0b10111010u8);
+        assert_eq!(
+            collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+            0
+        );
+        assert_eq!(
+            collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap(),
+            0b01000101u8
+        );
+        assert_eq!(
+            !(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap()),
+            0b10111010u8
+        );
 
-        assert_eq!(collapse_bits::<u8>(&vec![130, 150, 170, 180, 128, 200, 220, 240]).unwrap(), 255);
-        assert_eq!(!(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), 255);
+        assert_eq!(
+            collapse_bits::<u8>(&vec![130, 150, 170, 180, 128, 200, 220, 240]).unwrap(),
+            255
+        );
+        assert_eq!(
+            !(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()),
+            255
+        );
     }
 
     #[test]
