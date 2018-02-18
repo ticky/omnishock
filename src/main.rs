@@ -129,17 +129,21 @@ fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> 
             items.len()
         ));
     }
+
     let mut result = 0;
+
+    // We process from most significant to least significant digit
     for (i, byte) in items.iter().enumerate() {
-        let mask = (1 as u8) << i;
+        let mask = u8::max_value() >> i;
 
         // Are we setting this bit to 0 or 1?
-        if *byte <= mid_point {
+        if *byte > mid_point {
             result |= mask;
         } else {
             result &= !mask;
         }
     }
+
     return Ok(result);
 }
 
@@ -200,24 +204,24 @@ fn controller_map_twenty_byte(
     let raw_right_stick_y = controller.axis(Axis::RightY);
 
     // buttons1
-    let select_value = convert_button::<u8>(controller.button(Button::Back));
-    let left_stick_value = convert_button::<u8>(controller.button(Button::LeftStick));
-    let right_stick_value = convert_button::<u8>(controller.button(Button::RightStick));
-    let start_value = convert_button::<u8>(controller.button(Button::Start));
-    let dpad_up_value = convert_button::<u8>(controller.button(Button::DPadUp));
-    let dpad_right_value = convert_button::<u8>(controller.button(Button::DPadRight));
-    let dpad_down_value = convert_button::<u8>(controller.button(Button::DPadDown));
     let dpad_left_value = convert_button::<u8>(controller.button(Button::DPadLeft));
+    let dpad_down_value = convert_button::<u8>(controller.button(Button::DPadDown));
+    let dpad_right_value = convert_button::<u8>(controller.button(Button::DPadRight));
+    let dpad_up_value = convert_button::<u8>(controller.button(Button::DPadUp));
+    let start_value = convert_button::<u8>(controller.button(Button::Start));
+    let right_stick_value = convert_button::<u8>(controller.button(Button::RightStick));
+    let left_stick_value = convert_button::<u8>(controller.button(Button::LeftStick));
+    let select_value = convert_button::<u8>(controller.button(Button::Back));
 
     // buttons2
-    let l2_button_value;
-    let r2_button_value;
-    let l1_button_value = convert_button::<u8>(controller.button(Button::LeftShoulder));
-    let r1_button_value = convert_button::<u8>(controller.button(Button::RightShoulder));
-    let triangle_value = convert_button::<u8>(controller.button(Button::Y));
-    let circle_value = convert_button::<u8>(controller.button(Button::B));
-    let cross_value;
     let square_value;
+    let cross_value;
+    let circle_value = convert_button::<u8>(controller.button(Button::B));
+    let triangle_value = convert_button::<u8>(controller.button(Button::Y));
+    let r1_button_value = convert_button::<u8>(controller.button(Button::RightShoulder));
+    let l1_button_value = convert_button::<u8>(controller.button(Button::LeftShoulder));
+    let r2_button_value;
+    let l2_button_value;
 
     let mut right_stick_x_value = convert_whole_axis(controller.axis(Axis::RightX));
     let mut right_stick_y_value;
@@ -273,25 +277,25 @@ fn controller_map_twenty_byte(
     pressure_square = square_value;
 
     let buttons1 = vec![
-        select_value,
-        left_stick_value,
-        right_stick_value,
-        start_value,
-        dpad_up_value,
-        dpad_right_value,
-        dpad_down_value,
         dpad_left_value,
+        dpad_down_value,
+        dpad_right_value,
+        dpad_up_value,
+        start_value,
+        right_stick_value,
+        left_stick_value,
+        select_value,
     ];
 
     let buttons2 = vec![
-        l2_button_value,
-        r2_button_value,
-        l1_button_value,
-        r1_button_value,
-        triangle_value,
-        circle_value,
-        cross_value,
         square_value,
+        cross_value,
+        circle_value,
+        triangle_value,
+        r1_button_value,
+        l1_button_value,
+        r2_button_value,
+        l2_button_value,
     ];
 
     let mode_footer = match controller.button(Button::Guide) {
@@ -301,8 +305,11 @@ fn controller_map_twenty_byte(
 
     return vec![
         DUALSHOCK_MAGIC,
-        collapse_bits(&buttons1).unwrap(),
-        collapse_bits(&buttons2).unwrap(),
+        // DualShock protocol considers 0 to mean
+        // pressed and 1 to mean not pressed, so
+        // we NOT the output from collapse_bits here
+        !(collapse_bits(&buttons1).unwrap()),
+        !(collapse_bits(&buttons2).unwrap()),
         right_stick_x_value,
         right_stick_y_value,
         left_stick_x_value,
@@ -730,6 +737,18 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn collapse_bits_works() {
+        use super::collapse_bits;
+
+        assert_eq!(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap(), 0);
+        assert_eq!(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap(), 0b01000101u8);
+        assert_eq!(!(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap()), 0b10111010u8);
+
+        assert_eq!(collapse_bits::<u8>(&vec![130, 150, 170, 180, 128, 200, 220, 240]).unwrap(), 255);
+        assert_eq!(!(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), 255);
+    }
+
     #[test]
     fn whats_the_midpoint_of_a_is_accurate() {
         use super::whats_the_midpoint_of_a;
