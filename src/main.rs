@@ -228,19 +228,6 @@ fn controller_map_twenty_byte(
     let mut left_stick_x_value = convert_whole_axis(controller.axis(Axis::LeftX));
     let mut left_stick_y_value = convert_whole_axis(controller.axis(Axis::LeftY));
 
-    let pressure_right = convert_button::<u8>(controller.button(Button::DPadRight));
-    let pressure_left = convert_button::<u8>(controller.button(Button::DPadLeft));
-    let pressure_up = convert_button::<u8>(controller.button(Button::DPadUp));
-    let pressure_down = convert_button::<u8>(controller.button(Button::DPadDown));
-    let pressure_triangle = convert_button::<u8>(controller.button(Button::Y));
-    let pressure_circle = convert_button::<u8>(controller.button(Button::B));
-    let pressure_cross;
-    let pressure_square;
-    let pressure_l1 = convert_button::<u8>(controller.button(Button::LeftShoulder));
-    let pressure_r1 = convert_button::<u8>(controller.button(Button::RightShoulder));
-    let pressure_l2;
-    let pressure_r2;
-
     match trigger_mode {
         "right-stick" => {
             l2_button_value = convert_half_axis_negative(raw_right_stick_y);
@@ -263,10 +250,18 @@ fn controller_map_twenty_byte(
         _ => ()
     }
 
-    pressure_l2 = l2_button_value;
-    pressure_r2 = r2_button_value;
-    pressure_cross = cross_value;
-    pressure_square = square_value;
+    let pressure_right = convert_button::<u8>(controller.button(Button::DPadRight));
+    let pressure_left = convert_button::<u8>(controller.button(Button::DPadLeft));
+    let pressure_up = convert_button::<u8>(controller.button(Button::DPadUp));
+    let pressure_down = convert_button::<u8>(controller.button(Button::DPadDown));
+    let pressure_triangle = convert_button::<u8>(controller.button(Button::Y));
+    let pressure_circle = convert_button::<u8>(controller.button(Button::B));
+    let pressure_cross = cross_value;
+    let pressure_square = square_value;
+    let pressure_l1 = convert_button::<u8>(controller.button(Button::LeftShoulder));
+    let pressure_r1 = convert_button::<u8>(controller.button(Button::RightShoulder));
+    let pressure_l2 = l2_button_value;
+    let pressure_r2 = r2_button_value;
 
     let buttons1 = vec![
         dpad_left_value,
