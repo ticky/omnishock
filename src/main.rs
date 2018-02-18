@@ -214,30 +214,30 @@ fn controller_map_twenty_byte(
     let select_value = convert_button::<u8>(controller.button(Button::Back));
 
     // buttons2
-    let square_value;
-    let cross_value;
+    let mut square_value = convert_button::<u8>(controller.button(Button::X));
+    let mut cross_value = convert_button::<u8>(controller.button(Button::A));
     let circle_value = convert_button::<u8>(controller.button(Button::B));
     let triangle_value = convert_button::<u8>(controller.button(Button::Y));
     let r1_button_value = convert_button::<u8>(controller.button(Button::RightShoulder));
     let l1_button_value = convert_button::<u8>(controller.button(Button::LeftShoulder));
-    let r2_button_value;
-    let l2_button_value;
+    let mut r2_button_value = convert_half_axis_positive(raw_right_trigger);
+    let mut l2_button_value = convert_half_axis_positive(raw_left_trigger);
 
     let mut right_stick_x_value = convert_whole_axis(controller.axis(Axis::RightX));
-    let mut right_stick_y_value;
+    let mut right_stick_y_value = convert_whole_axis(controller.axis(Axis::RightY));
     let mut left_stick_x_value = convert_whole_axis(controller.axis(Axis::LeftX));
     let mut left_stick_y_value = convert_whole_axis(controller.axis(Axis::LeftY));
 
-    let pressure_right = convert_button(controller.button(Button::DPadRight));
-    let pressure_left = convert_button(controller.button(Button::DPadLeft));
-    let pressure_up = convert_button(controller.button(Button::DPadUp));
-    let pressure_down = convert_button(controller.button(Button::DPadDown));
-    let pressure_triangle = convert_button(controller.button(Button::Y));
-    let pressure_circle = convert_button(controller.button(Button::B));
+    let pressure_right = convert_button::<u8>(controller.button(Button::DPadRight));
+    let pressure_left = convert_button::<u8>(controller.button(Button::DPadLeft));
+    let pressure_up = convert_button::<u8>(controller.button(Button::DPadUp));
+    let pressure_down = convert_button::<u8>(controller.button(Button::DPadDown));
+    let pressure_triangle = convert_button::<u8>(controller.button(Button::Y));
+    let pressure_circle = convert_button::<u8>(controller.button(Button::B));
     let pressure_cross;
     let pressure_square;
-    let pressure_l1 = convert_button(controller.button(Button::LeftShoulder));
-    let pressure_r1 = convert_button(controller.button(Button::RightShoulder));
+    let pressure_l1 = convert_button::<u8>(controller.button(Button::LeftShoulder));
+    let pressure_r1 = convert_button::<u8>(controller.button(Button::RightShoulder));
     let pressure_l2;
     let pressure_r2;
 
@@ -246,29 +246,21 @@ fn controller_map_twenty_byte(
             l2_button_value = convert_half_axis_negative(raw_right_stick_y);
             r2_button_value = convert_half_axis_positive(raw_right_stick_y);
 
-            cross_value = convert_button(controller.button(Button::A));
-            square_value = convert_button(controller.button(Button::X));
+            cross_value = convert_button::<u8>(controller.button(Button::A));
+            square_value = convert_button::<u8>(controller.button(Button::X));
 
             right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button(controller.button(Button::A));
-            r2_button_value = convert_button(controller.button(Button::X));
+            l2_button_value = convert_button::<u8>(controller.button(Button::A));
+            r2_button_value = convert_button::<u8>(controller.button(Button::X));
 
             cross_value = convert_half_axis_positive(raw_right_trigger);
             square_value = convert_half_axis_positive(raw_left_trigger);
 
             right_stick_y_value = convert_whole_axis(raw_right_stick_y);
         }
-        _ => {
-            l2_button_value = convert_half_axis_positive(raw_left_trigger);
-            r2_button_value = convert_half_axis_positive(raw_right_trigger);
-
-            cross_value = convert_button(controller.button(Button::A));
-            square_value = convert_button(controller.button(Button::X));
-
-            right_stick_y_value = convert_whole_axis(raw_right_stick_y);
-        }
+        _ => ()
     }
 
     pressure_l2 = l2_button_value;
