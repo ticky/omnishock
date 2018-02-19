@@ -357,7 +357,7 @@ fn send_to_ps2_controller_emulator(
         );
     }
 
-    let mut serial = match serial::open(device_path) {
+    let serial = match serial::open(device_path) {
         Ok(mut serial) => {
             serial.reconfigure(&|settings| {
                 settings.set_baud_rate(serial::Baud9600)?;
@@ -370,13 +370,13 @@ fn send_to_ps2_controller_emulator(
         Err(error) => panic!("failed to open serial device: {}", error),
     };
 
-    send_to_ps2_controller_emulator_via(serial, arguments, sdl_manager)
+    send_to_ps2_controller_emulator_via(arguments, sdl_manager, serial)
 }
 
 fn send_to_ps2_controller_emulator_via<I: Read + Write>(
-    mut serial: I,
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
+    mut serial: I,
 ) -> std::io::Result<()> {
     let verbose = arguments.is_present("verbose");
     let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
