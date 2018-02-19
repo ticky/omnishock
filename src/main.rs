@@ -317,7 +317,12 @@ fn controller_map_twenty_byte(
     ];
 }
 
-fn clear_serial_buffer(serial: &mut SerialPort) {
+fn clear_serial_buffer<T: Read>(serial: &mut T) {
+    // NOTE: This should only be used with a SerialPort, as it has weird
+    //       behaviour around the read method which is not implied by the Read
+    //       trait. I'm hoping to find a better way to deal with this in future.
+    //       Possibly <https://doc.rust-lang.org/nightly/std/io/trait.Read.html#method.read_to_end>
+
     // Create a response buffer
     let mut response = vec![0; 1];
 
@@ -364,6 +369,17 @@ fn send_to_ps2_controller_emulator(
         }
         Err(error) => panic!("failed to open serial device: {}", error),
     };
+
+    send_to_ps2_controller_emulator_via(serial, arguments, sdl_manager)
+}
+
+fn send_to_ps2_controller_emulator_via<I: Read + Write>(
+    mut serial: I,
+    arguments: &clap::ArgMatches,
+    sdl_manager: &mut SDLManager,
+) -> std::io::Result<()> {
+    let verbose = arguments.is_present("verbose");
+    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
@@ -454,7 +470,7 @@ fn send_to_ps2_controller_emulator(
             }
         }
         Err(error) => {
-            println!("failed reading from device '{}': {}", device_path, error);
+            println!("failed reading from device: {}", error);
         }
     };
 
