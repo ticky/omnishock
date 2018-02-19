@@ -353,15 +353,17 @@ fn send_to_ps2_controller_emulator(
     }
 
     let mut serial = match serial::open(device_path) {
-        Ok(serial) => serial,
+        Ok(mut serial) => {
+            serial.reconfigure(&|settings| {
+                settings.set_baud_rate(serial::Baud9600)?;
+                settings.set_char_size(serial::Bits8);
+                Ok(())
+            })?;
+
+            serial
+        }
         Err(error) => panic!("failed to open serial device: {}", error),
     };
-
-    serial.reconfigure(&|settings| {
-        settings.set_baud_rate(serial::Baud9600)?;
-        settings.set_char_size(serial::Bits8);
-        Ok(())
-    })?;
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
