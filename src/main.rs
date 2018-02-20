@@ -158,28 +158,32 @@ fn convert_button<T: num::Bounded>(button: bool) -> T {
     };
 }
 
-fn convert_whole_axis(number: i16) -> u8 {
+fn convert_for_dualshock(number: i16) -> u8 {
     return (number.wrapping_shr(8) + 0x80) as u8;
 }
 
-fn convert_half_axis_positive(stick: i16) -> u8 {
-    if stick.is_positive() {
-        return stick.wrapping_shr(7) as u8;
+fn convert_half_axis_positive(stick: i16) -> i16 {
+    if stick == i16::max_value() {
+        return i16::max_value();
     }
 
-    return 0;
-}
-
-fn convert_half_axis_negative(stick: i16) -> u8 {
-    if stick.is_negative() {
-        return (-(stick + 1)).wrapping_shr(7) as u8;
+    if stick <= 0 {
+        return i16::min_value();
     }
 
-    return 0;
+    return (stick as i32 * 2 + i16::min_value() as i32) as i16;
 }
 
-fn combine_trigger_axes(left: i16, right: i16) -> u8 {
-    return convert_whole_axis(left - right);
+fn convert_half_axis_negative(stick: i16) -> i16 {
+    if stick == i16::min_value() {
+        return i16::max_value();
+    }
+
+    if stick >= 0 {
+        return i16::min_value();
+    }
+
+    return (-(stick + 1) as i32 * 2 + i16::min_value() as i32) as i16;
 }
 
 fn controller_map_seven_byte(
@@ -199,67 +203,64 @@ fn controller_map_twenty_byte(
 ) -> Vec<u8> {
     use sdl2::controller::{Axis, Button};
 
-    let raw_left_trigger = controller.axis(Axis::TriggerLeft);
-    let raw_right_trigger = controller.axis(Axis::TriggerRight);
-    let raw_right_stick_y = controller.axis(Axis::RightY);
-
     // buttons1
-    let dpad_left_value = convert_button::<u8>(controller.button(Button::DPadLeft));
-    let dpad_down_value = convert_button::<u8>(controller.button(Button::DPadDown));
-    let dpad_right_value = convert_button::<u8>(controller.button(Button::DPadRight));
-    let dpad_up_value = convert_button::<u8>(controller.button(Button::DPadUp));
-    let start_value = convert_button::<u8>(controller.button(Button::Start));
-    let right_stick_value = convert_button::<u8>(controller.button(Button::RightStick));
-    let left_stick_value = convert_button::<u8>(controller.button(Button::LeftStick));
-    let select_value = convert_button::<u8>(controller.button(Button::Back));
+    let dpad_left_value = convert_button::<i16>(controller.button(Button::DPadLeft));
+    let dpad_down_value = convert_button::<i16>(controller.button(Button::DPadDown));
+    let dpad_right_value = convert_button::<i16>(controller.button(Button::DPadRight));
+    let dpad_up_value = convert_button::<i16>(controller.button(Button::DPadUp));
+    let start_value = convert_button::<i16>(controller.button(Button::Start));
+    let right_stick_value = convert_button::<i16>(controller.button(Button::RightStick));
+    let left_stick_value = convert_button::<i16>(controller.button(Button::LeftStick));
+    let select_value = convert_button::<i16>(controller.button(Button::Back));
 
     // buttons2
-    let mut square_value = convert_button::<u8>(controller.button(Button::X));
-    let mut cross_value = convert_button::<u8>(controller.button(Button::A));
-    let circle_value = convert_button::<u8>(controller.button(Button::B));
-    let triangle_value = convert_button::<u8>(controller.button(Button::Y));
-    let r1_button_value = convert_button::<u8>(controller.button(Button::RightShoulder));
-    let l1_button_value = convert_button::<u8>(controller.button(Button::LeftShoulder));
-    let mut r2_button_value = convert_half_axis_positive(raw_right_trigger);
-    let mut l2_button_value = convert_half_axis_positive(raw_left_trigger);
+    let mut square_value = convert_button::<i16>(controller.button(Button::X));
+    let mut cross_value = convert_button::<i16>(controller.button(Button::A));
+    let circle_value = convert_button::<i16>(controller.button(Button::B));
+    let triangle_value = convert_button::<i16>(controller.button(Button::Y));
+    let r1_button_value = convert_button::<i16>(controller.button(Button::RightShoulder));
+    let l1_button_value = convert_button::<i16>(controller.button(Button::LeftShoulder));
+    let mut r2_button_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+    let mut l2_button_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
 
-    let mut right_stick_x_value = convert_whole_axis(controller.axis(Axis::RightX));
-    let mut right_stick_y_value = convert_whole_axis(controller.axis(Axis::RightY));
-    let mut left_stick_x_value = convert_whole_axis(controller.axis(Axis::LeftX));
-    let mut left_stick_y_value = convert_whole_axis(controller.axis(Axis::LeftY));
+    let right_stick_x_value = controller.axis(Axis::RightX);
+    let mut right_stick_y_value = controller.axis(Axis::RightY);
+    let left_stick_x_value = controller.axis(Axis::LeftX);
+    let left_stick_y_value = controller.axis(Axis::LeftY);
 
     match trigger_mode {
         "right-stick" => {
-            l2_button_value = convert_half_axis_negative(raw_right_stick_y);
-            r2_button_value = convert_half_axis_positive(raw_right_stick_y);
+            l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
+            r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
-            cross_value = convert_button::<u8>(controller.button(Button::A));
-            square_value = convert_button::<u8>(controller.button(Button::X));
+            cross_value = convert_button::<i16>(controller.button(Button::A));
+            square_value = convert_button::<i16>(controller.button(Button::X));
 
-            right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
+            // Combine the two raw trigger axes by subtracting one from the other
+            // NOTE: This doesn't allow for both to be used at once
+            right_stick_y_value =
+                controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button::<u8>(controller.button(Button::A));
-            r2_button_value = convert_button::<u8>(controller.button(Button::X));
+            l2_button_value = convert_button::<i16>(controller.button(Button::A));
+            r2_button_value = convert_button::<i16>(controller.button(Button::X));
 
-            cross_value = convert_half_axis_positive(raw_right_trigger);
-            square_value = convert_half_axis_positive(raw_left_trigger);
-
-            right_stick_y_value = convert_whole_axis(raw_right_stick_y);
+            cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+            square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
         }
         _ => (),
     }
 
-    let pressure_right = convert_button::<u8>(controller.button(Button::DPadRight));
-    let pressure_left = convert_button::<u8>(controller.button(Button::DPadLeft));
-    let pressure_up = convert_button::<u8>(controller.button(Button::DPadUp));
-    let pressure_down = convert_button::<u8>(controller.button(Button::DPadDown));
-    let pressure_triangle = convert_button::<u8>(controller.button(Button::Y));
-    let pressure_circle = convert_button::<u8>(controller.button(Button::B));
+    let pressure_right = convert_button::<i16>(controller.button(Button::DPadRight));
+    let pressure_left = convert_button::<i16>(controller.button(Button::DPadLeft));
+    let pressure_up = convert_button::<i16>(controller.button(Button::DPadUp));
+    let pressure_down = convert_button::<i16>(controller.button(Button::DPadDown));
+    let pressure_triangle = convert_button::<i16>(controller.button(Button::Y));
+    let pressure_circle = convert_button::<i16>(controller.button(Button::B));
     let pressure_cross = cross_value;
     let pressure_square = square_value;
-    let pressure_l1 = convert_button::<u8>(controller.button(Button::LeftShoulder));
-    let pressure_r1 = convert_button::<u8>(controller.button(Button::RightShoulder));
+    let pressure_l1 = convert_button::<i16>(controller.button(Button::LeftShoulder));
+    let pressure_r1 = convert_button::<i16>(controller.button(Button::RightShoulder));
     let pressure_l2 = l2_button_value;
     let pressure_r2 = r2_button_value;
 
@@ -297,22 +298,22 @@ fn controller_map_twenty_byte(
         // we NOT the output from collapse_bits here
         !(collapse_bits(&buttons1).unwrap()),
         !(collapse_bits(&buttons2).unwrap()),
-        right_stick_x_value,
-        right_stick_y_value,
-        left_stick_x_value,
-        left_stick_y_value,
-        pressure_right,
-        pressure_left,
-        pressure_up,
-        pressure_down,
-        pressure_triangle,
-        pressure_circle,
-        pressure_cross,
-        pressure_square,
-        pressure_l1,
-        pressure_r1,
-        pressure_l2,
-        pressure_r2,
+        convert_for_dualshock(right_stick_x_value),
+        convert_for_dualshock(right_stick_y_value),
+        convert_for_dualshock(left_stick_x_value),
+        convert_for_dualshock(left_stick_y_value),
+        convert_for_dualshock(pressure_right),
+        convert_for_dualshock(pressure_left),
+        convert_for_dualshock(pressure_up),
+        convert_for_dualshock(pressure_down),
+        convert_for_dualshock(pressure_triangle),
+        convert_for_dualshock(pressure_circle),
+        convert_for_dualshock(pressure_cross),
+        convert_for_dualshock(pressure_square),
+        convert_for_dualshock(pressure_l1),
+        convert_for_dualshock(pressure_r1),
+        convert_for_dualshock(pressure_l2),
+        convert_for_dualshock(pressure_r2),
         mode_footer,
     ];
 }
@@ -582,7 +583,7 @@ fn send_event_to_controller<I: Read + Write>(
     controller: &sdl2::controller::GameController,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
-    verbose: bool
+    verbose: bool,
 ) -> std::io::Result<()> {
     let sent;
     let mut bytes_received = 0;
@@ -590,17 +591,11 @@ fn send_event_to_controller<I: Read + Write>(
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
-            sent = controller_map_twenty_byte(
-                controller,
-                trigger_mode,
-            );
+            sent = controller_map_twenty_byte(controller, trigger_mode);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
-            let state = controller_map_seven_byte(
-                controller,
-                trigger_mode,
-            );
+            let state = controller_map_seven_byte(controller, trigger_mode);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -621,10 +616,7 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
-            let state = controller_map_twenty_byte(
-                controller,
-                trigger_mode,
-            );
+            let state = controller_map_twenty_byte(controller, trigger_mode);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -766,6 +758,38 @@ mod tests {
         assert_eq!(
             !(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()),
             255
+        );
+    }
+
+    #[test]
+    fn convert_half_axis_positive_is_accurate() {
+        use super::convert_half_axis_positive;
+
+        assert_eq!(
+            convert_half_axis_positive(i16::min_value()),
+            i16::min_value()
+        );
+        assert_eq!(convert_half_axis_positive(0), i16::min_value());
+        assert_eq!(convert_half_axis_positive(i16::max_value() / 2 + 1), 0);
+        assert_eq!(
+            convert_half_axis_positive(i16::max_value()),
+            i16::max_value()
+        );
+    }
+
+    #[test]
+    fn convert_half_axis_negative_is_accurate() {
+        use super::convert_half_axis_negative;
+
+        assert_eq!(
+            convert_half_axis_negative(i16::max_value()),
+            i16::min_value()
+        );
+        assert_eq!(convert_half_axis_negative(0), i16::min_value());
+        assert_eq!(convert_half_axis_negative(i16::min_value() / 2 - 1), 0);
+        assert_eq!(
+            convert_half_axis_negative(i16::min_value()),
+            i16::max_value()
         );
     }
 
