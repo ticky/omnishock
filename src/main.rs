@@ -95,8 +95,8 @@ fn main() {
                         .possible_value("cross-and-square"),
                 )
                 .arg(
-                    Arg::with_name("no-normalise")
-                        .long("no-normalise")
+                    Arg::with_name("no-stick-normalise")
+                        .long("no-stick-normalise")
                         .short("n")
                         .help("Disable stick normalisation")
                         .long_help(
@@ -497,7 +497,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
-    let normalise_sticks = command_arguments.is_present("no-normalise") == false;
+    let normalise_sticks = command_arguments.is_present("no-stick-normalise") == false;
 
     if verbose {
         match normalise_sticks {
