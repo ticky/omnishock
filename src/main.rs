@@ -492,6 +492,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     'outer: loop {
         // Wait for any events; but time out after 500ms
         for event in event_pump.wait_timeout_iter(500) {
+            // TODO: Decouple and unit test *this* bit
             use sdl2::event::Event;
 
             match event {
@@ -531,71 +532,13 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                         continue;
                     }
 
-                    let sent;
-                    let mut bytes_received = 0;
-                    let mut received = vec![0; 4];
-
-                    match communication_mode {
-                        ControllerEmulatorPacketType::None => {
-                            sent = controller_map_twenty_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-                        }
-
-                        ControllerEmulatorPacketType::SevenByte => {
-                            let state = controller_map_seven_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-
-                            serial.write_all(&state)?;
-                            bytes_received = match serial.read(&mut received) {
-                                Ok(bytes) => bytes,
-                                Err(error) => {
-                                    if verbose {
-                                        println!("Error reading response: {}", error);
-                                    }
-                                    0
-                                }
-                            };
-
-                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
-                                println!("WARNING: Adapter responded with an error status.")
-                            }
-
-                            sent = state;
-                        }
-
-                        ControllerEmulatorPacketType::TwentyByte => {
-                            let state = controller_map_twenty_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-
-                            serial.write_all(&state)?;
-                            bytes_received = match serial.read(&mut received) {
-                                Ok(bytes) => bytes,
-                                Err(error) => {
-                                    if verbose {
-                                        println!("Error reading response: {}", error);
-                                    }
-
-                                    0
-                                }
-                            };
-
-                            sent = state;
-                        }
-                    };
-
-                    if verbose {
-                        println!("Sent: {:x}", HexView::from(&sent));
-
-                        if bytes_received > 0 {
-                            println!("Received: {:x}", HexView::from(&received));
-                        }
-                    }
+                    send_event_to_controller(
+                        &mut serial,
+                        &sdl_manager.active_controllers[&which].controller,
+                        &communication_mode,
+                        trigger_mode,
+                        verbose,
+                    )?;
                 }
 
                 Event::Quit { .. } => break 'outer,
@@ -614,32 +557,13 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                         println!("Sending update due to timeout");
                     }
 
-                    let mut received = vec![0; 4];
-
-                    let state = controller_map_twenty_byte(
+                    send_event_to_controller(
+                        &mut serial,
                         &sdl_manager.active_controllers[&controller_id].controller,
+                        &communication_mode,
                         trigger_mode,
-                    );
-
-                    serial.write_all(&state)?;
-                    let bytes_received = match serial.read(&mut received) {
-                        Ok(bytes) => bytes,
-                        Err(error) => {
-                            if verbose {
-                                println!("Error reading response: {}", error);
-                            }
-
-                            0
-                        }
-                    };
-
-                    if verbose {
-                        println!("Sent: {:x}", HexView::from(&state));
-
-                        if bytes_received > 0 {
-                            println!("Received: {:x}", HexView::from(&received));
-                        }
-                    }
+                        verbose,
+                    )?;
                 } else {
                     if verbose {
                         println!("Timed out but no controller is connected, so doing nothing.");
@@ -648,6 +572,82 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             }
             _ => (),
         };
+    }
+
+    Ok(())
+}
+
+fn send_event_to_controller<I: Read + Write>(
+    serial: &mut I,
+    controller: &sdl2::controller::GameController,
+    communication_mode: &ControllerEmulatorPacketType,
+    trigger_mode: &str,
+    verbose: bool
+) -> std::io::Result<()> {
+    let sent;
+    let mut bytes_received = 0;
+    let mut received = vec![0; 4];
+
+    match *communication_mode {
+        ControllerEmulatorPacketType::None => {
+            sent = controller_map_twenty_byte(
+                controller,
+                trigger_mode,
+            );
+        }
+
+        ControllerEmulatorPacketType::SevenByte => {
+            let state = controller_map_seven_byte(
+                controller,
+                trigger_mode,
+            );
+
+            serial.write_all(&state)?;
+            bytes_received = match serial.read(&mut received) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    if verbose {
+                        println!("Error reading response: {}", error);
+                    }
+                    0
+                }
+            };
+
+            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                println!("WARNING: Adapter responded with an error status.")
+            }
+
+            sent = state;
+        }
+
+        ControllerEmulatorPacketType::TwentyByte => {
+            let state = controller_map_twenty_byte(
+                controller,
+                trigger_mode,
+            );
+
+            serial.write_all(&state)?;
+            bytes_received = match serial.read(&mut received) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    if verbose {
+                        println!("Error reading response: {}", error);
+                    }
+
+                    0
+                }
+            };
+
+            sent = state;
+        }
+    };
+
+    if verbose {
+        println!("Sent: {:x}", HexView::from(&sent));
+
+        if bytes_received > 0 {
+            println!("Received: {:x}", HexView::from(&received));
+        }
     }
 
     Ok(())
