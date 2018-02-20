@@ -653,7 +653,7 @@ fn send_event_to_controller<I: Read + Write>(
     Ok(())
 }
 
-fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
+fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
     println!("Printing all controller events...");
 
     for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
