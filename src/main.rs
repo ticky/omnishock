@@ -171,19 +171,11 @@ fn convert_half_axis_positive(stick: i16) -> i16 {
         return i16::min_value();
     }
 
-    return (stick as i32 * 2 + i16::min_value() as i32) as i16;
+    return (stick as i32 * 2).saturating_add(i16::min_value() as i32) as i16;
 }
 
 fn convert_half_axis_negative(stick: i16) -> i16 {
-    if stick == i16::min_value() {
-        return i16::max_value();
-    }
-
-    if stick >= 0 {
-        return i16::min_value();
-    }
-
-    return (-(stick + 1) as i32 * 2 + i16::min_value() as i32) as i16;
+    return convert_half_axis_positive(-(stick.saturating_add(1)));
 }
 
 fn controller_map_seven_byte(
