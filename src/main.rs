@@ -26,10 +26,10 @@ extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
-use std::cmp::PartialOrd;
+use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
-use std::ops::{Add, Div};
+use std::ops::{Add, Div, Neg};
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -175,20 +175,36 @@ fn convert_for_dualshock(number: i16) -> u8 {
     return (number.wrapping_shr(8) + 0x80) as u8;
 }
 
-fn convert_half_axis_positive(stick: i16) -> i16 {
-    if stick == i16::max_value() {
-        return i16::max_value();
+fn convert_half_axis_positive<
+    T: num::Bounded + num::Saturating + Copy + Div<Output = T> + PartialEq + From<u8>,
+>(
+    stick: T,
+) -> T {
+    // Special case the maximum values, so we don't end up with
+    if stick == T::max_value() {
+        return T::max_value();
     }
 
-    if stick <= 0 {
-        return i16::min_value();
-    }
+    let two_in_target_type = T::from(2);
+    let half_minimum = T::min_value().div(two_in_target_type);
+    let normalised_stick = stick.saturating_add(half_minimum);
 
-    return (stick as i32 * 2).saturating_add(i16::min_value() as i32) as i16;
+    // This is a weird way to multiply by two but it works eh
+    return normalised_stick.saturating_add(normalised_stick);
 }
 
-fn convert_half_axis_negative(stick: i16) -> i16 {
-    return convert_half_axis_positive(-(stick.saturating_add(1)));
+fn convert_half_axis_negative<
+    T: num::Bounded
+        + num::Saturating
+        + Copy
+        + Neg<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + From<u8>,
+>(
+    stick: T,
+) -> T {
+    return convert_half_axis_positive(stick.saturating_add(T::from(1)).neg());
 }
 
 fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
