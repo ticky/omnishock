@@ -10,6 +10,7 @@ readme = "README.md"
 
 [dependencies]
 clap = "2.30.0"
+game_time = "0.2.0"
 hex-view = "0.1.2"
 num = "0.1.42"
 sdl2 = "0.31.0"

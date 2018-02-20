@@ -20,6 +20,7 @@
 
 #[macro_use]
 extern crate clap;
+extern crate game_time;
 extern crate hex_view;
 use hex_view::HexView;
 extern crate num;
@@ -524,10 +525,28 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
+    use game_time::{FrameCount, FrameCounter, GameClock};
+    use game_time::framerate::RunningAverageSampler;
+
+    let mut clock = GameClock::new();
+    let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
+    let mut sim_time; // = clock.last_frame_time().clone();
+
     'outer: loop {
-        // Wait for any events; but time out after 500ms
-        for event in event_pump.wait_timeout_iter(500) {
-            // TODO: Decouple and unit test *this* bit
+        sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
+        counter.tick(&sim_time);
+
+        // if verbose {
+        //     println!(
+        //         "Running frame #{} at {:?} ({:?} frame time, {} avg)",
+        //         sim_time.frame_number(),
+        //         sim_time.total_game_time(),
+        //         sim_time.elapsed_game_time(),
+        //         counter.average_frame_rate(),
+        //     );
+        // }
+
+        for event in event_pump.poll_iter() {
             use sdl2::event::Event;
 
             match event {
@@ -560,55 +579,21 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                     };
                 }
 
-                Event::ControllerAxisMotion { which, .. }
-                | Event::ControllerButtonDown { which, .. }
-                | Event::ControllerButtonUp { which, .. } => {
-                    if which != 0 {
-                        continue;
-                    }
-
-                    send_event_to_controller(
-                        &mut serial,
-                        &sdl_manager.active_controllers[&which].controller,
-                        &communication_mode,
-                        trigger_mode,
-                        normalise_sticks,
-                        verbose,
-                    )?;
-                }
-
                 Event::Quit { .. } => break 'outer,
                 _ => (),
             }
         }
 
-        // Timeout reached: If we're talking to a device that needs it,
-        // force an update, then continue to truck
-        match communication_mode {
-            ControllerEmulatorPacketType::TwentyByte => {
-                let controller_id = 0;
-
-                if sdl_manager.active_controllers.contains_key(&controller_id) {
-                    if verbose {
-                        println!("Sending update due to timeout");
-                    }
-
-                    send_event_to_controller(
-                        &mut serial,
-                        &sdl_manager.active_controllers[&controller_id].controller,
-                        &communication_mode,
-                        trigger_mode,
-                        normalise_sticks,
-                        verbose,
-                    )?;
-                } else {
-                    if verbose {
-                        println!("Timed out but no controller is connected, so doing nothing.");
-                    }
-                }
-            }
-            _ => (),
-        };
+        if sdl_manager.active_controllers.contains_key(&0) {
+            send_event_to_controller(
+                &mut serial,
+                &sdl_manager.active_controllers[&0].controller,
+                &communication_mode,
+                trigger_mode,
+                normalise_sticks,
+                verbose,
+            )?;
+        }
     }
 
     Ok(())
