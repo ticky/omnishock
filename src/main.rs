@@ -26,8 +26,8 @@ extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
-use std::convert::From;
 use std::cmp::PartialOrd;
+use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div};
 
@@ -832,6 +832,9 @@ mod tests {
     fn convert_button_is_accurate() {
         use super::convert_button;
 
-        assert_eq!(convert_button::<u8>(true), 255_u8);
+        assert_eq!(convert_button::<u8>(true), u8::max_value());
+        assert_eq!(convert_button::<i64>(true), i64::max_value());
+        assert_eq!(convert_button::<u8>(false), u8::min_value());
+        assert_eq!(convert_button::<i64>(false), i64::min_value());
     }
 }
