@@ -20,12 +20,16 @@
 
 #[macro_use]
 extern crate clap;
+extern crate hex_view;
+use hex_view::HexView;
+extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
+use std::cmp::{PartialEq, PartialOrd};
+use std::convert::From;
 use std::io::prelude::{Read, Write};
-extern crate hex_view;
-use hex_view::HexView;
+use std::ops::{Add, Div, Neg};
 
 mod sdl_manager;
 use sdl_manager::SDLManager;
@@ -69,7 +73,9 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("ps2ce")
-                .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
+                .about(
+                    "Start a transliteration session using a PS2 Controller Emulator over Serial",
+                )
                 .arg(
                     Arg::with_name("device")
                         .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
@@ -87,6 +93,19 @@ fn main() {
                         .possible_value("normal")
                         .possible_value("right-stick")
                         .possible_value("cross-and-square"),
+                )
+                .arg(
+                    Arg::with_name("no-stick-normalise")
+                        .long("no-stick-normalise")
+                        .short("n")
+                        .help("Disable stick normalisation")
+                        .long_help(
+                            "Disable stick normalisation. Normally, stick values \
+                             are multiplied by 1.1, to simulate the prominent outer \
+                             deadzone exhibited by real DualShock 2 controllers. \
+                             This option removes this compensation. May be useful \
+                             if you're using another older-style analog controller.",
+                        ),
                 ),
         )
         .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
@@ -112,67 +131,98 @@ fn main() {
 
 // Misty gave me a special license exception for this stanza
 // <https://twitter.com/mistydemeo/status/914745750369714176>
-fn collapse_bits(bytes: &[u8]) -> Result<u8, String> {
-    if !bytes.len() == 8 {
+fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
+    items: &[T],
+) -> Result<u8, String> {
+    let mid_point = whats_the_midpoint_of_a::<T>();
+
+    if !items.len() == 8 {
         return Err(format!(
-            "Input must be 8 bytes long ({} elements provided)",
-            bytes.len()
+            "Input must be 8 items long ({} provided)",
+            items.len()
         ));
     }
+
     let mut result = 0;
-    for (i, byte) in bytes.iter().enumerate() {
-        let mask = (1 as u8) << i;
+
+    // We process from most significant to least significant digit
+    for (i, byte) in items.iter().enumerate() {
+        let mask = u8::max_value() >> i;
 
         // Are we setting this bit to 0 or 1?
-        if *byte <= 0x80 {
+        if *byte > mid_point {
             result |= mask;
         } else {
             result &= !mask;
         }
     }
+
     return Ok(result);
 }
 
-// Corner point for DualShock2: 0.835, Xbox One: 0.764
+fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
+    return (T::max_value() + T::min_value()) / T::from(2);
+}
 
-fn convert_button(button: bool) -> u8 {
+fn convert_button<T: num::Bounded>(button: bool) -> T {
     return match button {
-        true => 0xFF,
-        false => 0x00,
+        true => T::max_value(),
+        false => T::min_value(),
     };
 }
 
-fn convert_whole_axis(number: i16) -> u8 {
+fn convert_for_dualshock(number: i16) -> u8 {
     return (number.wrapping_shr(8) + 0x80) as u8;
 }
 
-fn convert_half_axis_positive(stick: i16) -> u8 {
-    if stick.is_positive() {
-        return stick.wrapping_shr(7) as u8;
+fn convert_half_axis_positive<
+    T: num::Bounded + num::Saturating + Copy + Div<Output = T> + PartialEq + From<u8>,
+>(
+    stick: T,
+) -> T {
+    // Special case the maximum values, so we don't end up with
+    if stick == T::max_value() {
+        return T::max_value();
     }
 
-    return 0;
+    let two_in_target_type = T::from(2);
+    let half_minimum = T::min_value().div(two_in_target_type);
+    let normalised_stick = stick.saturating_add(half_minimum);
+
+    // This is a weird way to multiply by two but it works eh
+    return normalised_stick.saturating_add(normalised_stick);
 }
 
-fn convert_half_axis_negative(stick: i16) -> u8 {
-    if stick.is_negative() {
-        return (-(stick + 1)).wrapping_shr(7) as u8;
-    }
-
-    return 0;
+fn convert_half_axis_negative<
+    T: num::Bounded
+        + num::Saturating
+        + Copy
+        + Neg<Output = T>
+        + Div<Output = T>
+        + PartialEq
+        + From<u8>,
+>(
+    stick: T,
+) -> T {
+    return convert_half_axis_positive(stick.saturating_add(T::from(1)).neg());
 }
 
-fn combine_trigger_axes(left: i16, right: i16) -> u8 {
-    return convert_whole_axis(left - right);
+fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
+    // Adjust stick positions to match those of the DualShock®2.
+    // The DualShock®2 has a prominent outer deadzone,
+    // so we shrink the usable area here by 10%.
+    *x = x.saturating_add(*x / 10);
+    *y = y.saturating_add(*y / 10);
 }
 
 fn controller_map_seven_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
+    normalise_sticks: bool,
 ) -> Vec<u8> {
     // Seven byte controller map is the same as
     // the first seven bytes of the twenty-byte map!
-    let mut map = controller_map_twenty_byte(controller, trigger_mode);
+    let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
     map.truncate(7);
     return map;
 }
@@ -180,113 +230,83 @@ fn controller_map_seven_byte(
 fn controller_map_twenty_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
+    normalise_sticks: bool,
 ) -> Vec<u8> {
     use sdl2::controller::{Axis, Button};
 
-    let raw_left_trigger = controller.axis(Axis::TriggerLeft);
-    let raw_right_trigger = controller.axis(Axis::TriggerRight);
-    let raw_right_stick_y = controller.axis(Axis::RightY);
-
     // buttons1
-    let select_value = convert_button(controller.button(Button::Back));
-    let left_stick_value = convert_button(controller.button(Button::LeftStick));
-    let right_stick_value = convert_button(controller.button(Button::RightStick));
-    let start_value = convert_button(controller.button(Button::Start));
-    let dpad_up_value = convert_button(controller.button(Button::DPadUp));
-    let dpad_right_value = convert_button(controller.button(Button::DPadRight));
-    let dpad_down_value = convert_button(controller.button(Button::DPadDown));
-    let dpad_left_value = convert_button(controller.button(Button::DPadLeft));
+    let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
+    let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
+    let dpad_right_value: i16 = convert_button(controller.button(Button::DPadRight));
+    let dpad_up_value: i16 = convert_button(controller.button(Button::DPadUp));
+    let start_value: i16 = convert_button(controller.button(Button::Start));
+    let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
+    let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
+    let select_value: i16 = convert_button(controller.button(Button::Back));
 
     // buttons2
-    let l2_button_value;
-    let r2_button_value;
-    let l1_button_value = convert_button(controller.button(Button::LeftShoulder));
-    let r1_button_value = convert_button(controller.button(Button::RightShoulder));
-    let triangle_value = convert_button(controller.button(Button::Y));
-    let circle_value = convert_button(controller.button(Button::B));
-    let cross_value;
-    let square_value;
+    let mut square_value: i16 = convert_button(controller.button(Button::X));
+    let mut cross_value: i16 = convert_button(controller.button(Button::A));
+    let circle_value: i16 = convert_button(controller.button(Button::B));
+    let triangle_value: i16 = convert_button(controller.button(Button::Y));
+    let r1_button_value: i16 = convert_button(controller.button(Button::RightShoulder));
+    let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
+    let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+    let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
 
-    let right_stick_x_value =
-        convert_whole_axis(controller.axis(Axis::RightX) /*.saturating_mul(1.1)*/);
-    let right_stick_y_value;
-    let left_stick_x_value =
-        convert_whole_axis(controller.axis(Axis::LeftX) /*.saturating_mul(1.1)*/);
-    let left_stick_y_value =
-        convert_whole_axis(controller.axis(Axis::LeftY) /*.saturating_mul(1.1)*/);
-
-    let pressure_right = convert_button(controller.button(Button::DPadRight));
-    let pressure_left = convert_button(controller.button(Button::DPadLeft));
-    let pressure_up = convert_button(controller.button(Button::DPadUp));
-    let pressure_down = convert_button(controller.button(Button::DPadDown));
-    let pressure_triangle = convert_button(controller.button(Button::Y));
-    let pressure_circle = convert_button(controller.button(Button::B));
-    let pressure_cross;
-    let pressure_square;
-    let pressure_l1 = convert_button(controller.button(Button::LeftShoulder));
-    let pressure_r1 = convert_button(controller.button(Button::RightShoulder));
-    let pressure_l2;
-    let pressure_r2;
-
-    // println!("right stick value: {} ({:x})", raw_right_stick_y, raw_right_stick_y);
+    let mut right_stick_x_value: i16 = controller.axis(Axis::RightX);
+    let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
+    let mut left_stick_x_value: i16 = controller.axis(Axis::LeftX);
+    let mut left_stick_y_value: i16 = controller.axis(Axis::LeftY);
 
     match trigger_mode {
         "right-stick" => {
-            l2_button_value = convert_half_axis_negative(raw_right_stick_y);
-            r2_button_value = convert_half_axis_positive(raw_right_stick_y);
+            l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
+            r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
             cross_value = convert_button(controller.button(Button::A));
             square_value = convert_button(controller.button(Button::X));
 
-            right_stick_y_value = combine_trigger_axes(raw_left_trigger, raw_right_trigger);
+            // Combine the two raw trigger axes by subtracting one from the other
+            // NOTE: This doesn't allow for both to be used at once
+            right_stick_y_value =
+                controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
             l2_button_value = convert_button(controller.button(Button::A));
             r2_button_value = convert_button(controller.button(Button::X));
 
-            cross_value = convert_half_axis_positive(raw_right_trigger);
-            square_value = convert_half_axis_positive(raw_left_trigger);
-
-            right_stick_y_value =
-                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
+            cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+            square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
         }
-        _ => {
-            l2_button_value = convert_half_axis_positive(raw_left_trigger);
-            r2_button_value = convert_half_axis_positive(raw_right_trigger);
-
-            cross_value = convert_button(controller.button(Button::A));
-            square_value = convert_button(controller.button(Button::X));
-
-            right_stick_y_value =
-                convert_whole_axis(raw_right_stick_y /*.saturating_mul(1.1)*/);
-        }
+        _ => (),
     }
 
-    pressure_l2 = l2_button_value;
-    pressure_r2 = r2_button_value;
-    pressure_cross = cross_value;
-    pressure_square = square_value;
+    if normalise_sticks {
+        normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
+        normalise_stick_as_dualshock2(&mut left_stick_x_value, &mut left_stick_y_value);
+    }
 
     let buttons1 = vec![
-        select_value,
-        left_stick_value,
-        right_stick_value,
-        start_value,
-        dpad_up_value,
-        dpad_right_value,
-        dpad_down_value,
         dpad_left_value,
+        dpad_down_value,
+        dpad_right_value,
+        dpad_up_value,
+        start_value,
+        right_stick_value,
+        left_stick_value,
+        select_value,
     ];
 
     let buttons2 = vec![
-        l2_button_value,
-        r2_button_value,
-        l1_button_value,
-        r1_button_value,
-        triangle_value,
-        circle_value,
-        cross_value,
         square_value,
+        cross_value,
+        circle_value,
+        triangle_value,
+        r1_button_value,
+        l1_button_value,
+        r2_button_value,
+        l2_button_value,
     ];
 
     let mode_footer = match controller.button(Button::Guide) {
@@ -296,29 +316,39 @@ fn controller_map_twenty_byte(
 
     return vec![
         DUALSHOCK_MAGIC,
-        collapse_bits(&buttons1).unwrap(),
-        collapse_bits(&buttons2).unwrap(),
-        right_stick_x_value,
-        right_stick_y_value,
-        left_stick_x_value,
-        left_stick_y_value,
-        pressure_right,
-        pressure_left,
-        pressure_up,
-        pressure_down,
-        pressure_triangle,
-        pressure_circle,
-        pressure_cross,
-        pressure_square,
-        pressure_l1,
-        pressure_r1,
-        pressure_l2,
-        pressure_r2,
+        // DualShock protocol considers 0 to mean
+        // pressed and 1 to mean not pressed, so
+        // we NOT the output from collapse_bits here
+        !(collapse_bits(&buttons1).unwrap()),
+        !(collapse_bits(&buttons2).unwrap()),
+        // Analog sticks
+        convert_for_dualshock(right_stick_x_value),
+        convert_for_dualshock(right_stick_y_value),
+        convert_for_dualshock(left_stick_x_value),
+        convert_for_dualshock(left_stick_y_value),
+        // Pressure values
+        convert_for_dualshock(dpad_right_value),
+        convert_for_dualshock(dpad_left_value),
+        convert_for_dualshock(dpad_up_value),
+        convert_for_dualshock(dpad_down_value),
+        convert_for_dualshock(triangle_value),
+        convert_for_dualshock(circle_value),
+        convert_for_dualshock(cross_value),
+        convert_for_dualshock(square_value),
+        convert_for_dualshock(l1_button_value),
+        convert_for_dualshock(r1_button_value),
+        convert_for_dualshock(l2_button_value),
+        convert_for_dualshock(r2_button_value),
         mode_footer,
     ];
 }
 
-fn clear_serial_buffer(serial: &mut SerialPort) {
+fn clear_serial_buffer<T: Read>(serial: &mut T) {
+    // NOTE: This should only be used with a SerialPort, as it has weird
+    //       behaviour around the read method which is not implied by the Read
+    //       trait. I'm hoping to find a better way to deal with this in future.
+    //       Possibly <https://doc.rust-lang.org/nightly/std/io/trait.Read.html#method.read_to_end>
+
     // Create a response buffer
     let mut response = vec![0; 1];
 
@@ -353,16 +383,29 @@ fn send_to_ps2_controller_emulator(
         );
     }
 
-    let mut serial = match serial::open(device_path) {
-        Ok(serial) => serial,
+    let serial = match serial::open(device_path) {
+        Ok(mut serial) => {
+            serial.reconfigure(&|settings| {
+                settings.set_baud_rate(serial::Baud9600)?;
+                settings.set_char_size(serial::Bits8);
+                Ok(())
+            })?;
+
+            serial
+        }
         Err(error) => panic!("failed to open serial device: {}", error),
     };
 
-    serial.reconfigure(&|settings| {
-        settings.set_baud_rate(serial::Baud9600)?;
-        settings.set_char_size(serial::Bits8);
-        Ok(())
-    })?;
+    send_to_ps2_controller_emulator_via(arguments, sdl_manager, serial)
+}
+
+fn send_to_ps2_controller_emulator_via<I: Read + Write>(
+    arguments: &clap::ArgMatches,
+    sdl_manager: &mut SDLManager,
+    mut serial: I,
+) -> std::io::Result<()> {
+    let verbose = arguments.is_present("verbose");
+    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
@@ -453,7 +496,7 @@ fn send_to_ps2_controller_emulator(
             }
         }
         Err(error) => {
-            println!("failed reading from device '{}': {}", device_path, error);
+            println!("failed reading from device: {}", error);
         }
     };
 
@@ -470,11 +513,21 @@ fn send_to_ps2_controller_emulator(
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
+    let normalise_sticks = command_arguments.is_present("no-stick-normalise") == false;
+
+    if verbose {
+        match normalise_sticks {
+            true => println!("Normalising stick extents (stick values * 1.1)"),
+            false => println!("Not normalising stick extents"),
+        }
+    }
+
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
     'outer: loop {
         // Wait for any events; but time out after 500ms
         for event in event_pump.wait_timeout_iter(500) {
+            // TODO: Decouple and unit test *this* bit
             use sdl2::event::Event;
 
             match event {
@@ -514,71 +567,14 @@ fn send_to_ps2_controller_emulator(
                         continue;
                     }
 
-                    let sent;
-                    let mut bytes_received = 0;
-                    let mut received = vec![0; 4];
-
-                    match communication_mode {
-                        ControllerEmulatorPacketType::None => {
-                            sent = controller_map_twenty_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-                        }
-
-                        ControllerEmulatorPacketType::SevenByte => {
-                            let state = controller_map_seven_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-
-                            serial.write_all(&state)?;
-                            bytes_received = match serial.read(&mut received) {
-                                Ok(bytes) => bytes,
-                                Err(error) => {
-                                    if verbose {
-                                        println!("Error reading response: {}", error);
-                                    }
-                                    0
-                                }
-                            };
-
-                            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
-                                println!("WARNING: Adapter responded with an error status.")
-                            }
-
-                            sent = state;
-                        }
-
-                        ControllerEmulatorPacketType::TwentyByte => {
-                            let state = controller_map_twenty_byte(
-                                &sdl_manager.active_controllers[&which].controller,
-                                trigger_mode,
-                            );
-
-                            serial.write_all(&state)?;
-                            bytes_received = match serial.read(&mut received) {
-                                Ok(bytes) => bytes,
-                                Err(error) => {
-                                    if verbose {
-                                        println!("Error reading response: {}", error);
-                                    }
-
-                                    0
-                                }
-                            };
-
-                            sent = state;
-                        }
-                    };
-
-                    if verbose {
-                        println!("Sent: {:x}", HexView::from(&sent));
-
-                        if bytes_received > 0 {
-                            println!("Received: {:x}", HexView::from(&received));
-                        }
-                    }
+                    send_event_to_controller(
+                        &mut serial,
+                        &sdl_manager.active_controllers[&which].controller,
+                        &communication_mode,
+                        trigger_mode,
+                        normalise_sticks,
+                        verbose,
+                    )?;
                 }
 
                 Event::Quit { .. } => break 'outer,
@@ -597,32 +593,14 @@ fn send_to_ps2_controller_emulator(
                         println!("Sending update due to timeout");
                     }
 
-                    let mut received = vec![0; 4];
-
-                    let state = controller_map_twenty_byte(
+                    send_event_to_controller(
+                        &mut serial,
                         &sdl_manager.active_controllers[&controller_id].controller,
+                        &communication_mode,
                         trigger_mode,
-                    );
-
-                    serial.write_all(&state)?;
-                    let bytes_received = match serial.read(&mut received) {
-                        Ok(bytes) => bytes,
-                        Err(error) => {
-                            if verbose {
-                                println!("Error reading response: {}", error);
-                            }
-
-                            0
-                        }
-                    };
-
-                    if verbose {
-                        println!("Sent: {:x}", HexView::from(&state));
-
-                        if bytes_received > 0 {
-                            println!("Received: {:x}", HexView::from(&received));
-                        }
-                    }
+                        normalise_sticks,
+                        verbose,
+                    )?;
                 } else {
                     if verbose {
                         println!("Timed out but no controller is connected, so doing nothing.");
@@ -636,7 +614,75 @@ fn send_to_ps2_controller_emulator(
     Ok(())
 }
 
-fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
+fn send_event_to_controller<I: Read + Write>(
+    serial: &mut I,
+    controller: &sdl2::controller::GameController,
+    communication_mode: &ControllerEmulatorPacketType,
+    trigger_mode: &str,
+    normalise_sticks: bool,
+    verbose: bool,
+) -> std::io::Result<()> {
+    let sent;
+    let mut bytes_received = 0;
+    let mut received = vec![0; 4];
+
+    match *communication_mode {
+        ControllerEmulatorPacketType::None => {
+            sent = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
+        }
+
+        ControllerEmulatorPacketType::SevenByte => {
+            let state = controller_map_seven_byte(controller, trigger_mode, normalise_sticks);
+
+            serial.write_all(&state)?;
+            bytes_received = match serial.read(&mut received) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    if verbose {
+                        println!("Error reading response: {}", error);
+                    }
+                    0
+                }
+            };
+
+            if received[0] != (SEVEN_BYTE_OK_RESPONSE as u8) {
+                println!("WARNING: Adapter responded with an error status.")
+            }
+
+            sent = state;
+        }
+
+        ControllerEmulatorPacketType::TwentyByte => {
+            let state = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
+
+            serial.write_all(&state)?;
+            bytes_received = match serial.read(&mut received) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    if verbose {
+                        println!("Error reading response: {}", error);
+                    }
+
+                    0
+                }
+            };
+
+            sent = state;
+        }
+    };
+
+    if verbose {
+        println!("Sent: {:x}", HexView::from(&sent));
+
+        if bytes_received > 0 {
+            println!("Received: {:x}", HexView::from(&received));
+        }
+    }
+
+    Ok(())
+}
+
+fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
     println!("Printing all controller events...");
 
     for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
@@ -720,5 +766,91 @@ fn print_events(arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::Quit { .. } => break,
             _ => (),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn collapse_bits_works() {
+        use super::collapse_bits;
+
+        assert_eq!(
+            collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+            0
+        );
+        assert_eq!(
+            collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap(),
+            0b01000101u8
+        );
+        assert_eq!(
+            !(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap()),
+            0b10111010u8
+        );
+
+        assert_eq!(
+            collapse_bits::<u8>(&vec![130, 150, 170, 180, 128, 200, 220, 240]).unwrap(),
+            255
+        );
+        assert_eq!(
+            !(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()),
+            255
+        );
+    }
+
+    #[test]
+    fn convert_half_axis_positive_is_accurate() {
+        use super::convert_half_axis_positive;
+
+        assert_eq!(
+            convert_half_axis_positive(i16::min_value()),
+            i16::min_value()
+        );
+        assert_eq!(convert_half_axis_positive(0), i16::min_value());
+        assert_eq!(convert_half_axis_positive(i16::max_value() / 2 + 1), 0);
+        assert_eq!(
+            convert_half_axis_positive(i16::max_value()),
+            i16::max_value()
+        );
+    }
+
+    #[test]
+    fn convert_half_axis_negative_is_accurate() {
+        use super::convert_half_axis_negative;
+
+        assert_eq!(
+            convert_half_axis_negative(i16::max_value()),
+            i16::min_value()
+        );
+        assert_eq!(convert_half_axis_negative(0), i16::min_value());
+        assert_eq!(convert_half_axis_negative(i16::min_value() / 2 - 1), 0);
+        assert_eq!(
+            convert_half_axis_negative(i16::min_value()),
+            i16::max_value()
+        );
+    }
+
+    #[test]
+    fn whats_the_midpoint_of_a_is_accurate() {
+        use super::whats_the_midpoint_of_a;
+
+        assert_eq!(whats_the_midpoint_of_a::<u8>(), 127_u8);
+        assert_eq!(
+            whats_the_midpoint_of_a::<u64>(),
+            9_223_372_036_854_775_807_u64
+        );
+        assert_eq!(whats_the_midpoint_of_a::<i16>(), 0_i16);
+        assert_eq!(whats_the_midpoint_of_a::<i64>(), 0_i64);
+        assert_eq!(whats_the_midpoint_of_a::<f32>(), 0_f32);
+    }
+
+    #[test]
+    fn convert_button_is_accurate() {
+        use super::convert_button;
+
+        assert_eq!(convert_button::<u8>(true), u8::max_value());
+        assert_eq!(convert_button::<i64>(true), i64::max_value());
+        assert_eq!(convert_button::<u8>(false), u8::min_value());
+        assert_eq!(convert_button::<i64>(false), i64::min_value());
     }
 }
