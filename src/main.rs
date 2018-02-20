@@ -73,7 +73,9 @@ fn main() {
         )
         .subcommand(
             SubCommand::with_name("ps2ce")
-                .about("Start a transliteration session using a Teensy 2.0 PS2 Controller Emulator")
+                .about(
+                    "Start a transliteration session using a PS2 Controller Emulator over Serial",
+                )
                 .arg(
                     Arg::with_name("device")
                         .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
@@ -91,6 +93,19 @@ fn main() {
                         .possible_value("normal")
                         .possible_value("right-stick")
                         .possible_value("cross-and-square"),
+                )
+                .arg(
+                    Arg::with_name("no-normalise")
+                        .long("no-normalise")
+                        .short("n")
+                        .help("Disable stick normalisation")
+                        .long_help(
+                            "Disable stick normalisation. Normally, stick values \
+                             are multiplied by 1.1, to simulate the prominent outer \
+                             deadzone exhibited by real DualShock 2 controllers. \
+                             This option removes this compensation. May be useful \
+                             if you're using another older-style analog controller.",
+                        ),
                 ),
         )
         .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
@@ -187,10 +202,11 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
 fn controller_map_seven_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
+    normalise_sticks: bool,
 ) -> Vec<u8> {
     // Seven byte controller map is the same as
     // the first seven bytes of the twenty-byte map!
-    let mut map = controller_map_twenty_byte(controller, trigger_mode);
+    let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
     map.truncate(7);
     return map;
 }
@@ -198,6 +214,7 @@ fn controller_map_seven_byte(
 fn controller_map_twenty_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
+    normalise_sticks: bool,
 ) -> Vec<u8> {
     use sdl2::controller::{Axis, Button};
 
@@ -249,8 +266,10 @@ fn controller_map_twenty_byte(
         _ => (),
     }
 
-    normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
-    normalise_stick_as_dualshock2(&mut left_stick_x_value, &mut left_stick_y_value);
+    if normalise_sticks {
+        normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
+        normalise_stick_as_dualshock2(&mut left_stick_x_value, &mut left_stick_y_value);
+    }
 
     let buttons1 = vec![
         dpad_left_value,
@@ -478,6 +497,15 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
+    let normalise_sticks = command_arguments.is_present("no-normalise") == false;
+
+    if verbose {
+        match normalise_sticks {
+            true => println!("Normalising stick extents (stick values * 1.1)"),
+            false => println!("Not normalising stick extents"),
+        }
+    }
+
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
     'outer: loop {
@@ -528,6 +556,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                         &sdl_manager.active_controllers[&which].controller,
                         &communication_mode,
                         trigger_mode,
+                        normalise_sticks,
                         verbose,
                     )?;
                 }
@@ -553,6 +582,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                         &sdl_manager.active_controllers[&controller_id].controller,
                         &communication_mode,
                         trigger_mode,
+                        normalise_sticks,
                         verbose,
                     )?;
                 } else {
@@ -573,6 +603,7 @@ fn send_event_to_controller<I: Read + Write>(
     controller: &sdl2::controller::GameController,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
+    normalise_sticks: bool,
     verbose: bool,
 ) -> std::io::Result<()> {
     let sent;
@@ -581,11 +612,11 @@ fn send_event_to_controller<I: Read + Write>(
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
-            sent = controller_map_twenty_byte(controller, trigger_mode);
+            sent = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
-            let state = controller_map_seven_byte(controller, trigger_mode);
+            let state = controller_map_seven_byte(controller, trigger_mode, normalise_sticks);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -606,7 +637,7 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
-            let state = controller_map_twenty_byte(controller, trigger_mode);
+            let state = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
