@@ -178,6 +178,27 @@ fn convert_half_axis_negative(stick: i16) -> i16 {
     return convert_half_axis_positive(-(stick.saturating_add(1)));
 }
 
+fn normalise_stick(x: &mut i16, y: &mut i16) {
+    use coord_transforms::d2::{cartesian2polar, polar2cartesian};
+
+    let stick_cartesian_vector = nalgebra::Vector2::new(*x as f64, *y as f64);
+
+    let mut stick_polar = cartesian2polar(&stick_cartesian_vector);
+
+    // Corner point for DualShock2: 0.835, Xbox One: 0.764
+    let stick_rho = stick_polar[0] * 1.1;
+    let stick_theta = stick_polar[1];
+
+    stick_polar = nalgebra::Vector2::new(stick_rho, stick_theta);
+
+    let stick_cartesian = polar2cartesian(&stick_polar);
+
+    println!("{}, {} => {}, {}", x, y, stick_cartesian[0].round() as i16, stick_cartesian[1].round() as i16);
+
+    *x = stick_cartesian[0].round() as i16;
+    *y = stick_cartesian[1].round() as i16;
+}
+
 fn controller_map_seven_byte(
     controller: &sdl2::controller::GameController,
     trigger_mode: &str,
@@ -215,10 +236,10 @@ fn controller_map_twenty_byte(
     let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
     let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
 
-    let right_stick_x_value: i16 = controller.axis(Axis::RightX);
+    let mut right_stick_x_value: i16 = controller.axis(Axis::RightX);
     let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
-    let left_stick_x_value: i16 = controller.axis(Axis::LeftX);
-    let left_stick_y_value: i16 = controller.axis(Axis::LeftY);
+    let mut left_stick_x_value: i16 = controller.axis(Axis::LeftX);
+    let mut left_stick_y_value: i16 = controller.axis(Axis::LeftY);
 
     match trigger_mode {
         "right-stick" => {
@@ -242,6 +263,9 @@ fn controller_map_twenty_byte(
         }
         _ => (),
     }
+
+    normalise_stick(&mut right_stick_x_value, &mut right_stick_y_value);
+    normalise_stick(&mut left_stick_x_value, &mut left_stick_y_value);
 
     let buttons1 = vec![
         dpad_left_value,
