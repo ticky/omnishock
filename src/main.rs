@@ -20,10 +20,8 @@
 
 #[macro_use]
 extern crate clap;
-extern crate coord_transforms;
 extern crate hex_view;
 use hex_view::HexView;
-extern crate nalgebra;
 extern crate num;
 extern crate sdl2;
 extern crate serial;
@@ -178,25 +176,12 @@ fn convert_half_axis_negative(stick: i16) -> i16 {
     return convert_half_axis_positive(-(stick.saturating_add(1)));
 }
 
-fn normalise_stick(x: &mut i16, y: &mut i16) {
-    use coord_transforms::d2::{cartesian2polar, polar2cartesian};
-
-    let stick_cartesian_vector = nalgebra::Vector2::new(*x as f64, *y as f64);
-
-    let mut stick_polar = cartesian2polar(&stick_cartesian_vector);
-
-    // Corner point for DualShock2: 0.835, Xbox One: 0.764
-    let stick_rho = stick_polar[0] * 1.1;
-    let stick_theta = stick_polar[1];
-
-    stick_polar = nalgebra::Vector2::new(stick_rho, stick_theta);
-
-    let stick_cartesian = polar2cartesian(&stick_polar);
-
-    println!("{}, {} => {}, {}", x, y, stick_cartesian[0].round() as i16, stick_cartesian[1].round() as i16);
-
-    *x = stick_cartesian[0].round() as i16;
-    *y = stick_cartesian[1].round() as i16;
+fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
+    // Adjust stick positions to match those of the DualShock®2.
+    // The DualShock®2 has a prominent outer deadzone,
+    // so we shrink the usable area here by 10%.
+    *x = x.saturating_add(*x / 10);
+    *y = y.saturating_add(*y / 10);
 }
 
 fn controller_map_seven_byte(
@@ -264,8 +249,8 @@ fn controller_map_twenty_byte(
         _ => (),
     }
 
-    normalise_stick(&mut right_stick_x_value, &mut right_stick_y_value);
-    normalise_stick(&mut left_stick_x_value, &mut left_stick_y_value);
+    normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
+    normalise_stick_as_dualshock2(&mut left_stick_x_value, &mut left_stick_y_value);
 
     let buttons1 = vec![
         dpad_left_value,
