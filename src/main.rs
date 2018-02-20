@@ -204,37 +204,37 @@ fn controller_map_twenty_byte(
     use sdl2::controller::{Axis, Button};
 
     // buttons1
-    let dpad_left_value = convert_button::<i16>(controller.button(Button::DPadLeft));
-    let dpad_down_value = convert_button::<i16>(controller.button(Button::DPadDown));
-    let dpad_right_value = convert_button::<i16>(controller.button(Button::DPadRight));
-    let dpad_up_value = convert_button::<i16>(controller.button(Button::DPadUp));
-    let start_value = convert_button::<i16>(controller.button(Button::Start));
-    let right_stick_value = convert_button::<i16>(controller.button(Button::RightStick));
-    let left_stick_value = convert_button::<i16>(controller.button(Button::LeftStick));
-    let select_value = convert_button::<i16>(controller.button(Button::Back));
+    let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
+    let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
+    let dpad_right_value: i16 = convert_button(controller.button(Button::DPadRight));
+    let dpad_up_value: i16 = convert_button(controller.button(Button::DPadUp));
+    let start_value: i16 = convert_button(controller.button(Button::Start));
+    let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
+    let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
+    let select_value: i16 = convert_button(controller.button(Button::Back));
 
     // buttons2
-    let mut square_value = convert_button::<i16>(controller.button(Button::X));
-    let mut cross_value = convert_button::<i16>(controller.button(Button::A));
-    let circle_value = convert_button::<i16>(controller.button(Button::B));
-    let triangle_value = convert_button::<i16>(controller.button(Button::Y));
-    let r1_button_value = convert_button::<i16>(controller.button(Button::RightShoulder));
-    let l1_button_value = convert_button::<i16>(controller.button(Button::LeftShoulder));
-    let mut r2_button_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
-    let mut l2_button_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
+    let mut square_value: i16 = convert_button(controller.button(Button::X));
+    let mut cross_value: i16 = convert_button(controller.button(Button::A));
+    let circle_value: i16 = convert_button(controller.button(Button::B));
+    let triangle_value: i16 = convert_button(controller.button(Button::Y));
+    let r1_button_value: i16 = convert_button(controller.button(Button::RightShoulder));
+    let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
+    let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+    let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
 
-    let right_stick_x_value = controller.axis(Axis::RightX);
-    let mut right_stick_y_value = controller.axis(Axis::RightY);
-    let left_stick_x_value = controller.axis(Axis::LeftX);
-    let left_stick_y_value = controller.axis(Axis::LeftY);
+    let right_stick_x_value: i16 = controller.axis(Axis::RightX);
+    let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
+    let left_stick_x_value: i16 = controller.axis(Axis::LeftX);
+    let left_stick_y_value: i16 = controller.axis(Axis::LeftY);
 
     match trigger_mode {
         "right-stick" => {
             l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
             r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
-            cross_value = convert_button::<i16>(controller.button(Button::A));
-            square_value = convert_button::<i16>(controller.button(Button::X));
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
 
             // Combine the two raw trigger axes by subtracting one from the other
             // NOTE: This doesn't allow for both to be used at once
@@ -242,27 +242,14 @@ fn controller_map_twenty_byte(
                 controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button::<i16>(controller.button(Button::A));
-            r2_button_value = convert_button::<i16>(controller.button(Button::X));
+            l2_button_value = convert_button(controller.button(Button::A));
+            r2_button_value = convert_button(controller.button(Button::X));
 
             cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
             square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
         }
         _ => (),
     }
-
-    let pressure_right = convert_button::<i16>(controller.button(Button::DPadRight));
-    let pressure_left = convert_button::<i16>(controller.button(Button::DPadLeft));
-    let pressure_up = convert_button::<i16>(controller.button(Button::DPadUp));
-    let pressure_down = convert_button::<i16>(controller.button(Button::DPadDown));
-    let pressure_triangle = convert_button::<i16>(controller.button(Button::Y));
-    let pressure_circle = convert_button::<i16>(controller.button(Button::B));
-    let pressure_cross = cross_value;
-    let pressure_square = square_value;
-    let pressure_l1 = convert_button::<i16>(controller.button(Button::LeftShoulder));
-    let pressure_r1 = convert_button::<i16>(controller.button(Button::RightShoulder));
-    let pressure_l2 = l2_button_value;
-    let pressure_r2 = r2_button_value;
 
     let buttons1 = vec![
         dpad_left_value,
@@ -298,22 +285,24 @@ fn controller_map_twenty_byte(
         // we NOT the output from collapse_bits here
         !(collapse_bits(&buttons1).unwrap()),
         !(collapse_bits(&buttons2).unwrap()),
+        // Analog sticks
         convert_for_dualshock(right_stick_x_value),
         convert_for_dualshock(right_stick_y_value),
         convert_for_dualshock(left_stick_x_value),
         convert_for_dualshock(left_stick_y_value),
-        convert_for_dualshock(pressure_right),
-        convert_for_dualshock(pressure_left),
-        convert_for_dualshock(pressure_up),
-        convert_for_dualshock(pressure_down),
-        convert_for_dualshock(pressure_triangle),
-        convert_for_dualshock(pressure_circle),
-        convert_for_dualshock(pressure_cross),
-        convert_for_dualshock(pressure_square),
-        convert_for_dualshock(pressure_l1),
-        convert_for_dualshock(pressure_r1),
-        convert_for_dualshock(pressure_l2),
-        convert_for_dualshock(pressure_r2),
+        // Pressure values
+        convert_for_dualshock(dpad_right_value),
+        convert_for_dualshock(dpad_left_value),
+        convert_for_dualshock(dpad_up_value),
+        convert_for_dualshock(dpad_down_value),
+        convert_for_dualshock(triangle_value),
+        convert_for_dualshock(circle_value),
+        convert_for_dualshock(cross_value),
+        convert_for_dualshock(square_value),
+        convert_for_dualshock(l1_button_value),
+        convert_for_dualshock(r1_button_value),
+        convert_for_dualshock(l2_button_value),
+        convert_for_dualshock(r2_button_value),
         mode_footer,
     ];
 }
