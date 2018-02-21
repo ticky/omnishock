@@ -599,15 +599,48 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             }
         }
 
-        if sdl_manager.active_controllers.contains_key(&0) {
-            send_event_to_controller(
-                &mut serial,
-                &sdl_manager.active_controllers[&0].controller,
-                &communication_mode,
-                trigger_mode,
-                normalise_sticks,
-                verbose,
-            )?;
+        match sdl_manager.active_controllers.get_mut(&0) {
+            Some(controller_manager) => {
+                let response = send_event_to_controller(
+                    &mut serial,
+                    controller_manager,
+                    &communication_mode,
+                    trigger_mode,
+                    normalise_sticks,
+                    verbose,
+                )?;
+
+                if !response.is_empty() {
+                    match controller_manager.haptic {
+                        Some(ref mut haptic) => {
+                            let small_motor_intensity = response[1];
+                            let large_motor_intensity = response[2];
+
+                            // We calculate the rumble intensity as 1/3 of the small
+                            // motor, plus the full intensity of the large motor
+                            let rumble_intensity = small_motor_intensity as f32 / 255.0 / 3.0
+                                + large_motor_intensity as f32 / 255.0;
+
+                            if verbose {
+                                println!(
+                                    "Setting haptic feedback to {} for {}",
+                                    rumble_intensity,
+                                    controller_manager.controller.name()
+                                );
+                            }
+
+                            // NOTE: Should probably be an <https://wiki.libsdl.org/SDL_HapticLeftRight>,
+                            //       but the `sdl2` crate doesn't yet support it.
+                            haptic.rumble_stop();
+                            if rumble_intensity > 0.0 {
+                                haptic.rumble_play(rumble_intensity, 500);
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            _ => (),
         }
 
         clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
@@ -618,7 +651,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
 fn send_event_to_controller<I: Read + Write>(
     serial: &mut I,
-    controller: &sdl2::controller::GameController,
+    controller_manager: &sdl_manager::ControllerManager,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
     normalise_sticks: bool,
@@ -630,11 +663,19 @@ fn send_event_to_controller<I: Read + Write>(
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
-            sent = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
+            sent = controller_map_twenty_byte(
+                &controller_manager.controller,
+                trigger_mode,
+                normalise_sticks,
+            );
         }
 
         ControllerEmulatorPacketType::SevenByte => {
-            let state = controller_map_seven_byte(controller, trigger_mode, normalise_sticks);
+            let state = controller_map_seven_byte(
+                &controller_manager.controller,
+                trigger_mode,
+                normalise_sticks,
+            );
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -655,7 +696,11 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
-            let state = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
+            let state = controller_map_twenty_byte(
+                &controller_manager.controller,
+                trigger_mode,
+                normalise_sticks,
+            );
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -672,6 +717,8 @@ fn send_event_to_controller<I: Read + Write>(
             sent = state;
         }
     };
+
+    received.truncate(bytes_received);
 
     if verbose {
         println!("Sent: {:x}", HexView::from(&sent));
