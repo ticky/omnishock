@@ -623,7 +623,7 @@ fn send_event_to_controller<I: Read + Write>(
     trigger_mode: &str,
     normalise_sticks: bool,
     verbose: bool,
-) -> std::io::Result<()> {
+) -> std::io::Result<Vec<u8>> {
     let sent;
     let mut bytes_received = 0;
     let mut received = vec![0; 4];
@@ -681,7 +681,7 @@ fn send_event_to_controller<I: Read + Write>(
         }
     }
 
-    Ok(())
+    Ok(received)
 }
 
 fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
