@@ -531,7 +531,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     let mut clock = GameClock::new();
     let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
-    let mut sim_time = clock.last_frame_time().clone();
+    let mut sim_time;
     let warning_threshold = FloatDuration::milliseconds(500.0);
     let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000);
 
@@ -548,7 +548,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 sim_time.instantaneous_frame_rate(),
                 counter.is_running_slow(&sim_time),
             );
-        } else if counter.is_running_slow(&sim_time) && sim_time.total_wall_time() > warning_threshold {
+        } else if counter.is_running_slow(&sim_time)
+            && sim_time.total_wall_time() > warning_threshold
+        {
             #[cfg(debug_assertions)]
             println!(
                 "Warning: slow frame @ {:.2} ({:.2}ms, {:.2}fps avg / {:}fps target)",
