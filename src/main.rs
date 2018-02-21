@@ -20,12 +20,14 @@
 
 #[macro_use]
 extern crate clap;
+extern crate game_time;
 extern crate hex_view;
 use hex_view::HexView;
 extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
+extern crate spin_sleep;
 use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
@@ -524,10 +526,42 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
+    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
+    use game_time::framerate::RunningAverageSampler;
+
+    let mut clock = GameClock::new();
+    let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
+    let mut sim_time;
+    let warning_threshold = FloatDuration::milliseconds(500.0);
+    let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000);
+
     'outer: loop {
-        // Wait for any events; but time out after 500ms
-        for event in event_pump.wait_timeout_iter(500) {
-            // TODO: Decouple and unit test *this* bit
+        sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
+        counter.tick(&sim_time);
+
+        if verbose {
+            println!(
+                "Frame @ {:.2} ({:.2}ms, {:}fps avg / {:.2}fps target, slow: {})",
+                sim_time.total_wall_time(),
+                sim_time.elapsed_wall_time().as_milliseconds(),
+                counter.average_frame_rate(),
+                sim_time.instantaneous_frame_rate(),
+                counter.is_running_slow(&sim_time),
+            );
+        } else if counter.is_running_slow(&sim_time)
+            && sim_time.total_wall_time() > warning_threshold
+        {
+            #[cfg(debug_assertions)]
+            println!(
+                "Warning: slow frame @ {:.2} ({:.2}ms, {:.2}fps avg / {:}fps target)",
+                sim_time.total_wall_time(),
+                sim_time.elapsed_wall_time().as_milliseconds(),
+                counter.average_frame_rate(),
+                sim_time.instantaneous_frame_rate(),
+            );
+        }
+
+        for event in event_pump.poll_iter() {
             use sdl2::event::Event;
 
             match event {
@@ -560,55 +594,23 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                     };
                 }
 
-                Event::ControllerAxisMotion { which, .. }
-                | Event::ControllerButtonDown { which, .. }
-                | Event::ControllerButtonUp { which, .. } => {
-                    if which != 0 {
-                        continue;
-                    }
-
-                    send_event_to_controller(
-                        &mut serial,
-                        &sdl_manager.active_controllers[&which].controller,
-                        &communication_mode,
-                        trigger_mode,
-                        normalise_sticks,
-                        verbose,
-                    )?;
-                }
-
                 Event::Quit { .. } => break 'outer,
                 _ => (),
             }
         }
 
-        // Timeout reached: If we're talking to a device that needs it,
-        // force an update, then continue to truck
-        match communication_mode {
-            ControllerEmulatorPacketType::TwentyByte => {
-                let controller_id = 0;
+        if sdl_manager.active_controllers.contains_key(&0) {
+            send_event_to_controller(
+                &mut serial,
+                &sdl_manager.active_controllers[&0].controller,
+                &communication_mode,
+                trigger_mode,
+                normalise_sticks,
+                verbose,
+            )?;
+        }
 
-                if sdl_manager.active_controllers.contains_key(&controller_id) {
-                    if verbose {
-                        println!("Sending update due to timeout");
-                    }
-
-                    send_event_to_controller(
-                        &mut serial,
-                        &sdl_manager.active_controllers[&controller_id].controller,
-                        &communication_mode,
-                        trigger_mode,
-                        normalise_sticks,
-                        verbose,
-                    )?;
-                } else {
-                    if verbose {
-                        println!("Timed out but no controller is connected, so doing nothing.");
-                    }
-                }
-            }
-            _ => (),
-        };
+        clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
     }
 
     Ok(())
