@@ -27,6 +27,7 @@ extern crate num;
 extern crate sdl2;
 extern crate serial;
 use serial::prelude::SerialPort;
+extern crate spin_sleep;
 use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
@@ -525,26 +526,38 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
-    use game_time::{FrameCount, FrameCounter, GameClock};
+    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
     use game_time::framerate::RunningAverageSampler;
 
     let mut clock = GameClock::new();
     let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
-    let mut sim_time; // = clock.last_frame_time().clone();
+    let mut sim_time = clock.last_frame_time().clone();
+    let warning_threshold = FloatDuration::milliseconds(500.0);
+    let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000);
 
     'outer: loop {
         sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
         counter.tick(&sim_time);
 
-        // if verbose {
-        //     println!(
-        //         "Running frame #{} at {:?} ({:?} frame time, {} avg)",
-        //         sim_time.frame_number(),
-        //         sim_time.total_game_time(),
-        //         sim_time.elapsed_game_time(),
-        //         counter.average_frame_rate(),
-        //     );
-        // }
+        if verbose {
+            println!(
+                "Frame @ {:.2} ({:.2}ms, {:}fps avg / {:.2}fps target, slow: {})",
+                sim_time.total_wall_time(),
+                sim_time.elapsed_wall_time().as_milliseconds(),
+                counter.average_frame_rate(),
+                sim_time.instantaneous_frame_rate(),
+                counter.is_running_slow(&sim_time),
+            );
+        } else if counter.is_running_slow(&sim_time) && sim_time.total_wall_time() > warning_threshold {
+            #[cfg(debug_assertions)]
+            println!(
+                "Warning: slow frame @ {:.2} ({:.2}ms, {:.2}fps avg / {:}fps target)",
+                sim_time.total_wall_time(),
+                sim_time.elapsed_wall_time().as_milliseconds(),
+                counter.average_frame_rate(),
+                sim_time.instantaneous_frame_rate(),
+            );
+        }
 
         for event in event_pump.poll_iter() {
             use sdl2::event::Event;
@@ -594,6 +607,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 verbose,
             )?;
         }
+
+        clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
     }
 
     Ok(())
