@@ -526,6 +526,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     let mut event_pump = sdl_manager.context.event_pump().unwrap();
 
+    // We use `game_time` to keep track of "frame" time and try to hit a
+    // consistent rate at all times. We use `spin_sleep` instead of
+    // `thread::Sleep` to get more accurate sleep times on all platforms.
     use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
     use game_time::framerate::RunningAverageSampler;
 
@@ -533,13 +536,21 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
     let mut sim_time;
     let warning_threshold = FloatDuration::milliseconds(500.0);
+
+    // `spin_sleeper` gives us a more accurate sleep timer.
+    // With it we will trust `thread::Sleep` for all but the last 1ms
+    // (1,000,000ns) of the sleep timer, then it will spin for the remainder.
+    // With this in place we only dip below 95% of our speed target a handful
+    // of times in a 4-minute period, rather than nearly every iteration.
     let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000);
 
     'outer: loop {
+        // Tick the "frame" timer and counters forward
         sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
         counter.tick(&sim_time);
 
         if verbose {
+            // If we're `--verbose`, we print out stats for every iteration
             println!(
                 "Frame @ {:.2} ({:.2}ms, {:}fps avg / {:.2}fps target, slow: {})",
                 sim_time.total_wall_time(),
@@ -551,6 +562,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         } else if counter.is_running_slow(&sim_time)
             && sim_time.total_wall_time() > warning_threshold
         {
+            // If we're not `--verbose`, and in a debug build, we print out
+            // stats only on slow iterations
             #[cfg(debug_assertions)]
             println!(
                 "Warning: slow frame @ {:.2} ({:.2}ms, {:.2}fps avg / {:}fps target)",
@@ -561,6 +574,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             );
         }
 
+        // Now that we've said we're restarting the frame,
+        // let's iterate over controller events we've got from SDL2
         for event in event_pump.poll_iter() {
             use sdl2::event::Event;
 
@@ -599,6 +614,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             }
         }
 
+        // Now that we've kept track of controller additions & removals,
+        // post an update for the one controller we currently care about.
         match sdl_manager.active_controllers.get_mut(&0) {
             Some(controller_manager) => {
                 let response = send_event_to_controller(
@@ -610,6 +627,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                     verbose,
                 )?;
 
+                // If we've receieved a response from the controller, and our
+                // controller supports haptic feedback, update its haptic state
                 if !response.is_empty() {
                     match controller_manager.haptic {
                         Some(ref mut haptic) => {
@@ -643,6 +662,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             _ => (),
         }
 
+        // Having run all our processing for this iteration, accurately sleep
+        // until we need to process the next one
         clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
     }
 
