@@ -26,16 +26,21 @@ use std::collections::HashMap;
 // and central place for setting up defaults
 
 pub trait Gamepad {
+    fn name(&self) -> String;
     fn button(&self, button: sdl2::controller::Button) -> bool;
     fn axis(&self, axis: sdl2::controller::Axis) -> i16;
 }
 
 pub struct ControllerManager {
-    pub controller: sdl2::controller::GameController,
+    controller: sdl2::controller::GameController,
     pub haptic: Option<sdl2::haptic::Haptic>,
 }
 
 impl Gamepad for ControllerManager {
+    fn name(&self) -> String {
+        self.controller.name()
+    }
+
     fn button(&self, button: sdl2::controller::Button) -> bool {
         self.controller.button(button)
     }

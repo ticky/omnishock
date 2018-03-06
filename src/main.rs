@@ -633,6 +633,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 // If we've receieved a response from the controller, and our
                 // controller supports haptic feedback, update its haptic state
                 if !response.is_empty() {
+                    let controller_name = controller_manager.name();
+
                     match controller_manager.haptic {
                         Some(ref mut haptic) => {
                             let small_motor_intensity = response[1];
@@ -647,7 +649,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                                 println!(
                                     "Setting haptic feedback to {} for {}",
                                     rumble_intensity,
-                                    controller_manager.controller.name()
+                                    controller_name
                                 );
                             }
 
@@ -786,23 +788,27 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             } => {
                 println!(
                     "“{}” (#{}): {:?}: {}",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     axis,
                     value
                 );
 
                 match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller_manager) => match controller_manager.haptic {
-                        Some(ref mut haptic) => {
-                            println!(
-                                "Running haptic feedback for “{}”",
-                                controller_manager.controller.name()
-                            );
-                            haptic.rumble_stop();
-                            haptic.rumble_play(1.0, 500);
+                    Some(controller_manager) => {
+                        let controller_name = controller_manager.name();
+
+                        match controller_manager.haptic {
+                            Some(ref mut haptic) => {
+                                println!(
+                                    "Running haptic feedback for “{}”",
+                                    controller_name
+                                );
+                                haptic.rumble_stop();
+                                haptic.rumble_play(1.0, 500);
+                            }
+                            _ => (),
                         }
-                        _ => (),
                     },
                     _ => (),
                 };
@@ -811,7 +817,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerButtonDown { which, button, .. } => {
                 println!(
                     "“{}” (#{}): {:?}: down",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     button
                 );
@@ -820,7 +826,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerButtonUp { which, button, .. } => {
                 println!(
                     "“{}” (#{}): {:?}: up",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     button
                 );
