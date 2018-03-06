@@ -34,6 +34,7 @@ use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
 
 mod sdl_manager;
+use sdl_manager::Gamepad;
 use sdl_manager::SDLManager;
 
 // The DualShock protocol uses 0x5A in many places!
@@ -217,69 +218,71 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
     *y = y.saturating_add(*y / 10);
 }
 
-fn controller_map_seven_byte(
-    controller: &sdl2::controller::GameController,
+fn controller_map_seven_byte<T: Gamepad>(
+    controller_manager: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     // Seven byte controller map is the same as
     // the first seven bytes of the twenty-byte map!
-    let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
+    let mut map = controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
     map.truncate(7);
     return map;
 }
 
-fn controller_map_twenty_byte(
-    controller: &sdl2::controller::GameController,
+fn controller_map_twenty_byte<T: Gamepad>(
+    controller_manager: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     use sdl2::controller::{Axis, Button};
 
     // buttons1
-    let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
-    let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
-    let dpad_right_value: i16 = convert_button(controller.button(Button::DPadRight));
-    let dpad_up_value: i16 = convert_button(controller.button(Button::DPadUp));
-    let start_value: i16 = convert_button(controller.button(Button::Start));
-    let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
-    let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
-    let select_value: i16 = convert_button(controller.button(Button::Back));
+    let dpad_left_value: i16 = convert_button(controller_manager.button(Button::DPadLeft));
+    let dpad_down_value: i16 = convert_button(controller_manager.button(Button::DPadDown));
+    let dpad_right_value: i16 = convert_button(controller_manager.button(Button::DPadRight));
+    let dpad_up_value: i16 = convert_button(controller_manager.button(Button::DPadUp));
+    let start_value: i16 = convert_button(controller_manager.button(Button::Start));
+    let right_stick_value: i16 = convert_button(controller_manager.button(Button::RightStick));
+    let left_stick_value: i16 = convert_button(controller_manager.button(Button::LeftStick));
+    let select_value: i16 = convert_button(controller_manager.button(Button::Back));
 
     // buttons2
-    let mut square_value: i16 = convert_button(controller.button(Button::X));
-    let mut cross_value: i16 = convert_button(controller.button(Button::A));
-    let circle_value: i16 = convert_button(controller.button(Button::B));
-    let triangle_value: i16 = convert_button(controller.button(Button::Y));
-    let r1_button_value: i16 = convert_button(controller.button(Button::RightShoulder));
-    let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
-    let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
-    let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
+    let mut square_value: i16 = convert_button(controller_manager.button(Button::X));
+    let mut cross_value: i16 = convert_button(controller_manager.button(Button::A));
+    let circle_value: i16 = convert_button(controller_manager.button(Button::B));
+    let triangle_value: i16 = convert_button(controller_manager.button(Button::Y));
+    let r1_button_value: i16 = convert_button(controller_manager.button(Button::RightShoulder));
+    let l1_button_value: i16 = convert_button(controller_manager.button(Button::LeftShoulder));
+    let mut r2_button_value: i16 =
+        convert_half_axis_positive(controller_manager.axis(Axis::TriggerRight));
+    let mut l2_button_value: i16 =
+        convert_half_axis_positive(controller_manager.axis(Axis::TriggerLeft));
 
-    let mut right_stick_x_value: i16 = controller.axis(Axis::RightX);
-    let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
-    let mut left_stick_x_value: i16 = controller.axis(Axis::LeftX);
-    let mut left_stick_y_value: i16 = controller.axis(Axis::LeftY);
+    let mut right_stick_x_value: i16 = controller_manager.axis(Axis::RightX);
+    let mut right_stick_y_value: i16 = controller_manager.axis(Axis::RightY);
+    let mut left_stick_x_value: i16 = controller_manager.axis(Axis::LeftX);
+    let mut left_stick_y_value: i16 = controller_manager.axis(Axis::LeftY);
 
     match trigger_mode {
         "right-stick" => {
-            l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
-            r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
+            l2_button_value = convert_half_axis_negative(controller_manager.axis(Axis::RightY));
+            r2_button_value = convert_half_axis_positive(controller_manager.axis(Axis::RightY));
 
-            cross_value = convert_button(controller.button(Button::A));
-            square_value = convert_button(controller.button(Button::X));
+            cross_value = convert_button(controller_manager.button(Button::A));
+            square_value = convert_button(controller_manager.button(Button::X));
 
             // Combine the two raw trigger axes by subtracting one from the other
             // NOTE: This doesn't allow for both to be used at once
-            right_stick_y_value =
-                controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
+            right_stick_y_value = controller_manager.axis(Axis::TriggerLeft)
+                - controller_manager.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button(controller.button(Button::A));
-            r2_button_value = convert_button(controller.button(Button::X));
+            l2_button_value = convert_button(controller_manager.button(Button::A));
+            r2_button_value = convert_button(controller_manager.button(Button::X));
 
-            cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
-            square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
+            cross_value = convert_half_axis_positive(controller_manager.axis(Axis::TriggerRight));
+            square_value = convert_half_axis_positive(controller_manager.axis(Axis::TriggerLeft));
         }
         _ => (),
     }
@@ -311,7 +314,7 @@ fn controller_map_twenty_byte(
         l2_button_value,
     ];
 
-    let mode_footer = match controller.button(Button::Guide) {
+    let mode_footer = match controller_manager.button(Button::Guide) {
         true => 0xAA,
         false => 0x55,
     };
@@ -684,19 +687,12 @@ fn send_event_to_controller<I: Read + Write>(
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
-            sent = controller_map_twenty_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            sent = controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
-            let state = controller_map_seven_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            let state =
+                controller_map_seven_byte(controller_manager, trigger_mode, normalise_sticks);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {
@@ -717,11 +713,8 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
-            let state = controller_map_twenty_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            let state =
+                controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
 
             serial.write_all(&state)?;
             bytes_received = match serial.read(&mut received) {

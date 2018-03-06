@@ -25,9 +25,24 @@ use std::collections::HashMap;
 // Structure for passing around access to the SDL Subsystems,
 // and central place for setting up defaults
 
+pub trait Gamepad {
+    fn button(&self, button: sdl2::controller::Button) -> bool;
+    fn axis(&self, axis: sdl2::controller::Axis) -> i16;
+}
+
 pub struct ControllerManager {
     pub controller: sdl2::controller::GameController,
     pub haptic: Option<sdl2::haptic::Haptic>,
+}
+
+impl Gamepad for ControllerManager {
+    fn button(&self, button: sdl2::controller::Button) -> bool {
+        self.controller.button(button)
+    }
+
+    fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
+        self.controller.axis(axis)
+    }
 }
 
 pub struct SDLManager {
