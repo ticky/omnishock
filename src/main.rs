@@ -648,8 +648,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                             if verbose {
                                 println!(
                                     "Setting haptic feedback to {} for {}",
-                                    rumble_intensity,
-                                    controller_name
+                                    rumble_intensity, controller_name
                                 );
                             }
 
@@ -800,16 +799,13 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
                         match controller_manager.haptic {
                             Some(ref mut haptic) => {
-                                println!(
-                                    "Running haptic feedback for “{}”",
-                                    controller_name
-                                );
+                                println!("Running haptic feedback for “{}”", controller_name);
                                 haptic.rumble_stop();
                                 haptic.rumble_play(1.0, 500);
                             }
                             _ => (),
                         }
-                    },
+                    }
                     _ => (),
                 };
             }
@@ -921,5 +917,120 @@ mod tests {
         assert_eq!(convert_button::<i64>(true), i64::max_value());
         assert_eq!(convert_button::<u8>(false), u8::min_value());
         assert_eq!(convert_button::<i64>(false), i64::min_value());
+    }
+
+    use sdl2;
+    use std::collections::HashMap;
+    use sdl_manager::Gamepad;
+
+    struct FauxController {
+        name: String,
+        buttons: HashMap<sdl2::controller::Button, bool>,
+        axes: HashMap<sdl2::controller::Axis, i16>,
+    }
+
+    impl FauxController {
+        fn create_with_name(name: String) -> FauxController {
+            let buttons = HashMap::new();
+            let axes = HashMap::new();
+            let new_controller = FauxController {
+                name,
+                buttons,
+                axes,
+            };
+
+            return new_controller;
+        }
+
+        fn set_name(&mut self, name: String) {
+            self.name = name;
+        }
+
+        fn set_button(&mut self, button: sdl2::controller::Button, value: bool) {
+            self.buttons.insert(button, value);
+        }
+
+        fn set_axis(&mut self, axis: sdl2::controller::Axis, value: i16) {
+            self.axes.insert(axis, value);
+        }
+    }
+
+    impl Gamepad for FauxController {
+        fn name(&self) -> String {
+            self.name.clone()
+        }
+
+        fn button(&self, button: sdl2::controller::Button) -> bool {
+            *self.buttons.get(&button).unwrap_or(&false)
+        }
+
+        fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
+            *self.axes.get(&axis).unwrap_or(&0)
+        }
+    }
+
+    #[test]
+    fn controller_map_twenty_byte_works() {
+        use DUALSHOCK_MAGIC;
+        use super::controller_map_twenty_byte;
+
+        let neutral_controller =
+            FauxController::create_with_name(String::from("Neutral Controller"));
+
+        assert_eq!(
+            controller_map_twenty_byte(&neutral_controller, "", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+                // Pressure values
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                // Mode footer
+                85,
+            ]
+        );
+    }
+
+    #[test]
+    fn controller_map_seven_byte_works() {
+        use DUALSHOCK_MAGIC;
+        use super::controller_map_seven_byte;
+
+        let neutral_controller =
+            FauxController::create_with_name(String::from("Neutral Controller"));
+
+        assert_eq!(
+            controller_map_seven_byte(&neutral_controller, "", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+            ]
+        );
     }
 }
