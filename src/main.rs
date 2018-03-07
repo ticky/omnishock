@@ -975,7 +975,69 @@ mod tests {
             FauxController::create_with_name(String::from("Applejack Game-player Pad"));
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "", true),
+            controller_map_twenty_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+                // Pressure values
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                // Mode footer
+                85,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+                // Pressure values
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                // Mode footer
+                85,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
@@ -1015,7 +1077,7 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "", true),
+            controller_map_twenty_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
@@ -1044,6 +1106,68 @@ mod tests {
                 85,
             ]
         );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                189,
+                // Analog sticks
+                24,
+                255,
+                129,
+                110,
+                // Pressure values
+                0,
+                255,
+                0,
+                0,
+                0,
+                0,
+                255,
+                0,
+                0,
+                0,
+                0,
+                128,
+                // Mode footer
+                85,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                126,
+                // Analog sticks
+                24,
+                198,
+                129,
+                110,
+                // Pressure values
+                0,
+                255,
+                0,
+                0,
+                0,
+                0,
+                0,
+                255,
+                0,
+                0,
+                255,
+                0,
+                // Mode footer
+                85,
+            ]
+        );
     }
 
     #[test]
@@ -1056,7 +1180,39 @@ mod tests {
             FauxController::create_with_name(String::from("Apple Pippin Controller"));
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "", true),
+            controller_map_seven_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                255,
+                // buttons2
+                255,
+                // Analog sticks
+                128,
+                128,
+                128,
+                128,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
@@ -1081,13 +1237,45 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "", true),
+            controller_map_seven_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
                 127,
                 // buttons2
                 190,
+                // Analog sticks
+                24,
+                198,
+                129,
+                110,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                189,
+                // Analog sticks
+                24,
+                255,
+                129,
+                110,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                126,
                 // Analog sticks
                 24,
                 198,
