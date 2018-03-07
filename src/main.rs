@@ -920,8 +920,8 @@ mod tests {
     }
 
     use sdl2;
-    use std::collections::HashMap;
     use sdl_manager::Gamepad;
+    use std::collections::HashMap;
 
     struct FauxController {
         name: String,
@@ -967,8 +967,8 @@ mod tests {
 
     #[test]
     fn controller_map_twenty_byte_works() {
-        use DUALSHOCK_MAGIC;
         use super::controller_map_twenty_byte;
+        use DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
 
         let mut controller =
@@ -1172,8 +1172,8 @@ mod tests {
 
     #[test]
     fn controller_map_seven_byte_works() {
-        use DUALSHOCK_MAGIC;
         use super::controller_map_seven_byte;
+        use DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
 
         let mut controller =
