@@ -942,10 +942,6 @@ mod tests {
             return new_controller;
         }
 
-        fn set_name(&mut self, name: String) {
-            self.name = name;
-        }
-
         fn set_button(&mut self, button: sdl2::controller::Button, value: bool) {
             self.buttons.insert(button, value);
         }
@@ -973,12 +969,13 @@ mod tests {
     fn controller_map_twenty_byte_works() {
         use DUALSHOCK_MAGIC;
         use super::controller_map_twenty_byte;
+        use sdl2::controller::{Axis, Button};
 
-        let neutral_controller =
-            FauxController::create_with_name(String::from("Neutral Controller"));
+        let mut controller =
+            FauxController::create_with_name(String::from("Applejack Game-player Pad"));
 
         assert_eq!(
-            controller_map_twenty_byte(&neutral_controller, "", true),
+            controller_map_twenty_byte(&controller, "", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
@@ -1007,18 +1004,59 @@ mod tests {
                 85,
             ]
         );
+
+        // Do some stuff to the controller state, and test again
+        controller.set_button(Button::DPadLeft, true);
+        controller.set_button(Button::A, true);
+        controller.set_axis(Axis::TriggerLeft, i16::max_value());
+        controller.set_axis(Axis::RightX, -24_000);
+        controller.set_axis(Axis::RightY, 16_500);
+        controller.set_axis(Axis::LeftX, 255);
+        controller.set_axis(Axis::LeftY, -4_096);
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                190,
+                // Analog sticks
+                24,
+                198,
+                129,
+                110,
+                // Pressure values
+                0,
+                255,
+                0,
+                0,
+                0,
+                0,
+                255,
+                0,
+                0,
+                0,
+                255,
+                0,
+                // Mode footer
+                85,
+            ]
+        );
     }
 
     #[test]
     fn controller_map_seven_byte_works() {
         use DUALSHOCK_MAGIC;
         use super::controller_map_seven_byte;
+        use sdl2::controller::{Axis, Button};
 
-        let neutral_controller =
-            FauxController::create_with_name(String::from("Neutral Controller"));
+        let mut controller =
+            FauxController::create_with_name(String::from("Apple Pippin Controller"));
 
         assert_eq!(
-            controller_map_seven_byte(&neutral_controller, "", true),
+            controller_map_seven_byte(&controller, "", true),
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
@@ -1030,6 +1068,31 @@ mod tests {
                 128,
                 128,
                 128,
+            ]
+        );
+
+        // Do some stuff to the controller state, and test again
+        controller.set_button(Button::DPadLeft, true);
+        controller.set_button(Button::A, true);
+        controller.set_axis(Axis::TriggerLeft, i16::max_value());
+        controller.set_axis(Axis::RightX, -24_000);
+        controller.set_axis(Axis::RightY, 16_500);
+        controller.set_axis(Axis::LeftX, 255);
+        controller.set_axis(Axis::LeftY, -4_096);
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                127,
+                // buttons2
+                190,
+                // Analog sticks
+                24,
+                198,
+                129,
+                110,
             ]
         );
     }
