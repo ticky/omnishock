@@ -271,7 +271,7 @@ fn controller_map_twenty_byte<T: Gamepad>(
     use sdl2::controller::{Axis, Button};
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::start("controller_map_twenty_byte() buttons1");
+    flame::start("buttons1");
     // buttons1
     let dpad_left_value: i16 = convert_button(controller_manager.button(Button::DPadLeft));
     let dpad_down_value: i16 = convert_button(controller_manager.button(Button::DPadDown));
@@ -282,10 +282,10 @@ fn controller_map_twenty_byte<T: Gamepad>(
     let left_stick_value: i16 = convert_button(controller_manager.button(Button::LeftStick));
     let select_value: i16 = convert_button(controller_manager.button(Button::Back));
     #[cfg(feature = "flamegraph-profiling")]
-    flame::end("controller_map_twenty_byte() buttons1");
+    flame::end("buttons1");
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::start("controller_map_twenty_byte() buttons2");
+    flame::start("buttons2");
     // buttons2
     let mut square_value: i16 = convert_button(controller_manager.button(Button::X));
     let mut cross_value: i16 = convert_button(controller_manager.button(Button::A));
@@ -298,19 +298,19 @@ fn controller_map_twenty_byte<T: Gamepad>(
     let mut l2_button_value: i16 =
         convert_half_axis_positive(controller_manager.axis(Axis::TriggerLeft));
     #[cfg(feature = "flamegraph-profiling")]
-    flame::end("controller_map_twenty_byte() buttons2");
+    flame::end("buttons2");
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::start("controller_map_twenty_byte() sticks");
+    flame::start("sticks");
     let mut right_stick_x_value: i16 = controller_manager.axis(Axis::RightX);
     let mut right_stick_y_value: i16 = controller_manager.axis(Axis::RightY);
     let mut left_stick_x_value: i16 = controller_manager.axis(Axis::LeftX);
     let mut left_stick_y_value: i16 = controller_manager.axis(Axis::LeftY);
     #[cfg(feature = "flamegraph-profiling")]
-    flame::end("controller_map_twenty_byte() sticks");
+    flame::end("sticks");
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::start("controller_map_twenty_byte() trigger_mode");
+    flame::start("handle trigger_mode");
     match trigger_mode {
         "right-stick" => {
             l2_button_value = convert_half_axis_negative(controller_manager.axis(Axis::RightY));
@@ -334,7 +334,7 @@ fn controller_map_twenty_byte<T: Gamepad>(
         _ => (),
     }
     #[cfg(feature = "flamegraph-profiling")]
-    flame::end("controller_map_twenty_byte() trigger_mode");
+    flame::end("handle trigger_mode");
 
     if normalise_sticks {
         normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
@@ -605,9 +605,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     'outer: loop {
         #[cfg(feature = "flamegraph-profiling")]
-        let _guard = flame::start_guard("send_to_ps2_controller_emulator_via() frame");
-        #[cfg(feature = "flamegraph-profiling")]
-        let render_guard = flame::start_guard("send_to_ps2_controller_emulator_via() frame render");
+        let _outer_guard = flame::start_guard("frame");
         // Tick the "frame" timer and counters forward
         sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
         counter.tick(&sim_time);
@@ -645,9 +643,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             match event {
                 Event::ControllerDeviceAdded { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
-                    let _guard = flame::start_guard(
-                        "send_to_ps2_controller_emulator_via() Event::ControllerDeviceAdded",
-                    );
+                    let _guard = flame::start_guard("Event::ControllerDeviceAdded");
                     if !sdl_manager.has_controller(which).ok().unwrap_or(true) {
                         match sdl_manager.add_controller(which) {
                             Ok(_) => {
@@ -666,9 +662,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
                 Event::ControllerDeviceRemoved { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
-                    let _guard = flame::start_guard(
-                        "send_to_ps2_controller_emulator_via() Event::ControllerDeviceRemoved",
-                    );
+                    let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
                     match sdl_manager.remove_controller(which) {
                         Some(_) => {
                             println!(
@@ -734,12 +728,13 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             _ => (),
         }
 
-        #[cfg(feature = "flamegraph-profiling")]
-        render_guard.end();
-
-        // Having run all our processing for this iteration, accurately sleep
-        // until we need to process the next one
-        clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
+        {
+            #[cfg(feature = "flamegraph-profiling")]
+            let _sleep_guard = flame::start_guard("post-frame sleep");
+            // Having run all our processing for this iteration, accurately sleep
+            // until we need to process the next one
+            clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
+        };
     }
 
     Ok(())
@@ -761,21 +756,33 @@ fn send_event_to_controller<I: Read + Write>(
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::None");
             sent = controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::SevenByte");
             let state =
                 controller_map_seven_byte(controller_manager, trigger_mode, normalise_sticks);
 
-            serial.write_all(&state)?;
-            bytes_received = match serial.read(&mut received) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    if verbose {
-                        println!("Error reading response: {}", error);
+            {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial write");
+                serial.write_all(&state)?;
+            };
+            bytes_received = {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial read");
+                match serial.read(&mut received) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        if verbose {
+                            println!("Error reading response: {}", error);
+                        }
+                        0
                     }
-                    0
                 }
             };
 
@@ -787,18 +794,27 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::TwentyByte");
             let state =
                 controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
 
-            serial.write_all(&state)?;
-            bytes_received = match serial.read(&mut received) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    if verbose {
-                        println!("Error reading response: {}", error);
+            {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial write");
+                serial.write_all(&state)?;
+            };
+            bytes_received = {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial read");
+                match serial.read(&mut received) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        if verbose {
+                            println!("Error reading response: {}", error);
+                        }
+                        0
                     }
-
-                    0
                 }
             };
 
@@ -830,7 +846,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
-                let _guard = flame::start_guard("print_events Event::ControllerDeviceAdded");
+                let _guard = flame::start_guard("Event::ControllerDeviceAdded");
                 if !sdl_manager.has_controller(which).ok().unwrap_or(true) {
                     match sdl_manager.add_controller(which) {
                         Ok(_) => {
@@ -849,7 +865,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
             Event::ControllerDeviceRemoved { which, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
-                let _guard = flame::start_guard("print_events Event::ControllerDeviceRemoved");
+                let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
                 match sdl_manager.remove_controller(which) {
                     Some(_) => {
                         println!(
@@ -865,7 +881,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                 which, axis, value, ..
             } => {
                 #[cfg(feature = "flamegraph-profiling")]
-                let _guard = flame::start_guard("print_events Event::ControllerAxisMotion");
+                let _guard = flame::start_guard("Event::ControllerAxisMotion");
                 println!(
                     "“{}” (#{}): {:?}: {}",
                     sdl_manager.active_controllers[&which].name(),
@@ -881,9 +897,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                         match controller_manager.haptic {
                             Some(ref mut haptic) => {
                                 #[cfg(feature = "flamegraph-profiling")]
-                                let _guard = flame::start_guard(
-                                    "print_events Event::ControllerAxisMotion haptic",
-                                );
+                                let _guard = flame::start_guard("set rumble");
                                 println!("Running haptic feedback for “{}”", controller_name);
                                 haptic.rumble_stop();
                                 haptic.rumble_play(1.0, 500);
@@ -897,7 +911,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
             Event::ControllerButtonDown { which, button, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
-                let _guard = flame::start_guard("print_events Event::ControllerButtonDown");
+                let _guard = flame::start_guard("Event::ControllerButtonDown");
                 println!(
                     "“{}” (#{}): {:?}: down",
                     sdl_manager.active_controllers[&which].name(),
@@ -908,7 +922,7 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
             Event::ControllerButtonUp { which, button, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
-                let _guard = flame::start_guard("print_events Event::ControllerButtonUp");
+                let _guard = flame::start_guard("Event::ControllerButtonUp");
                 println!(
                     "“{}” (#{}): {:?}: up",
                     sdl_manager.active_controllers[&which].name(),

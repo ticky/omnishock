@@ -68,7 +68,7 @@ impl SDLManager {
         // Initialise SDL2, plus the video, haptic & game controller subsystems
         let context = {
             #[cfg(feature = "flamegraph-profiling")]
-            let _guard = flame::start_guard("SDLManager::init() sdl2::init().unwrap()");
+            let _guard = flame::start_guard("initialise sdl2 core");
             sdl2::init().unwrap()
         };
         /* NOTE: The video subsystem is not currently used, except for the side
@@ -77,7 +77,7 @@ impl SDLManager {
          *       in future. */
         let video_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
-            let _guard = flame::start_guard("SDLManager::init() video subsystem");
+            let _guard = flame::start_guard("initialise video subsystem");
             match context.video() {
                 Ok(video) => Some(video),
                 Err(error) => {
@@ -88,13 +88,12 @@ impl SDLManager {
         };
         let haptic_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
-            let _guard = flame::start_guard("SDLManager::init() haptic subsystem");
+            let _guard = flame::start_guard("initialise haptic subsystem");
             context.haptic().unwrap()
         };
         let game_controller_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
-            let _guard =
-                flame::start_guard("SDLManager::init() controller subsystem initialisation");
+            let _guard = flame::start_guard("initialise controller subsystem");
             context.game_controller().unwrap()
         };
 
@@ -110,7 +109,7 @@ impl SDLManager {
         };
 
         #[cfg(feature = "flamegraph-profiling")]
-        flame::start("SDLManager::init() import controller mappings");
+        flame::start("import controller mappings");
         // Load pre-set controller mappings (note that SDL will still read
         // others from the SDL_GAMECONTROLLERCONFIG environment variable)
         let controller_mappings = include_str!(
@@ -129,7 +128,7 @@ impl SDLManager {
             }
         }
         #[cfg(feature = "flamegraph-profiling")]
-        flame::end("SDLManager::init() import controller mappings");
+        flame::end("import controller mappings");
 
         // Look into controllers that were already connected at start-up
         sdl_manager.add_available_controllers();
