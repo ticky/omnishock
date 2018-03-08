@@ -645,7 +645,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             match event {
                 Event::ControllerDeviceAdded { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
-                    let _guard = flame::start_guard("send_to_ps2_controller_emulator_via() Event::ControllerDeviceAdded");
+                    let _guard = flame::start_guard(
+                        "send_to_ps2_controller_emulator_via() Event::ControllerDeviceAdded",
+                    );
                     if !sdl_manager.has_controller(which).ok().unwrap_or(true) {
                         match sdl_manager.add_controller(which) {
                             Ok(_) => {
@@ -664,7 +666,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
                 Event::ControllerDeviceRemoved { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
-                    let _guard = flame::start_guard("send_to_ps2_controller_emulator_via() Event::ControllerDeviceRemoved");
+                    let _guard = flame::start_guard(
+                        "send_to_ps2_controller_emulator_via() Event::ControllerDeviceRemoved",
+                    );
                     match sdl_manager.remove_controller(which) {
                         Some(_) => {
                             println!(
@@ -877,7 +881,9 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                         match controller_manager.haptic {
                             Some(ref mut haptic) => {
                                 #[cfg(feature = "flamegraph-profiling")]
-                                let _guard = flame::start_guard("print_events Event::ControllerAxisMotion haptic");
+                                let _guard = flame::start_guard(
+                                    "print_events Event::ControllerAxisMotion haptic",
+                                );
                                 println!("Running haptic feedback for “{}”", controller_name);
                                 haptic.rumble_stop();
                                 haptic.rumble_play(1.0, 500);

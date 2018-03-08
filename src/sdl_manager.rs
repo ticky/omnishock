@@ -93,7 +93,8 @@ impl SDLManager {
         };
         let game_controller_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
-            let _guard = flame::start_guard("SDLManager::init() controller subsystem initialisation");
+            let _guard =
+                flame::start_guard("SDLManager::init() controller subsystem initialisation");
             context.game_controller().unwrap()
         };
 
