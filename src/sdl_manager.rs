@@ -32,7 +32,7 @@ pub struct ControllerManager {
 
 pub struct SDLManager {
     pub context: sdl2::Sdl,
-    pub video_subsystem: sdl2::VideoSubsystem,
+    pub video_subsystem: Option<sdl2::VideoSubsystem>,
     pub haptic_subsystem: sdl2::HapticSubsystem,
     pub game_controller_subsystem: sdl2::GameControllerSubsystem,
     pub active_controllers: HashMap<i32, ControllerManager>,
@@ -46,7 +46,13 @@ impl SDLManager {
          *       effect that it prevents the system from triggering the screen
          *       saver. It will, however, be used to provide a window for focus
          *       in future. */
-        let video_subsystem = context.video().unwrap();
+        let video_subsystem = match context.video() {
+            Ok(video) => Some(video),
+            Err(error) => {
+                println!("couldn't initialise video: {}", error);
+                None
+            }
+        };
         let haptic_subsystem = context.haptic().unwrap();
         let game_controller_subsystem = context.game_controller().unwrap();
 
