@@ -21,6 +21,10 @@ Support for more hardware, and more firmware variants, is planned for the future
 - SDL2 (v2.0.6 or later)
 - Controller emulator hardware (see above)
 
+### Mac-specific
+
+SDL2 has broad support for many types of USB and Bluetooth gamepads on macOS, however, for Xbox 360 controllers, and for better support for Xbox One controllers, you will likely want [the 360Controller driver](https://github.com/360Controller/360Controller).
+
 ### Linux-specific
 
 The version of sdl2 currently in the Debian package library is quite old (it's version 2.0.5 as of writing), so if you have trouble using certain gamepads (like the Xbox Wireless Controller, for instance), you will need to [build sdl from source](https://wiki.libsdl.org/Installation#Linux.2FUnix).
