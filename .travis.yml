@@ -20,7 +20,7 @@ matrix:
     # macOS
     - env: TARGET=x86_64-apple-darwin
       os: osx
-      rust: 1.24.0
+      rust: 1.32.0
 
     # macOS (Stable)
     - env: TARGET=x86_64-apple-darwin
