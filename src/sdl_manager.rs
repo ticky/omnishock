@@ -112,11 +112,11 @@ impl SDLManager {
         flame::start("import controller mappings");
         // Load pre-set controller mappings (note that SDL will still read
         // others from the SDL_GAMECONTROLLERCONFIG environment variable)
-        let controller_mappings = include_str!(
-            "../vendor/SDL_GameControllerDB/gamecontrollerdb.txt"
-        ).lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty() && !line.starts_with('#'));
+        let controller_mappings =
+            include_str!("../vendor/SDL_GameControllerDB/gamecontrollerdb.txt")
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty() && !line.starts_with('#'));
 
         // Load each mapping individually rather than using load_mappings,
         // as it turns out doing them together can break without warning
@@ -213,7 +213,8 @@ impl SDLManager {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#has_controller()");
         let controller = self.game_controller_subsystem.open(index)?;
-        return Ok(self.active_controllers
+        return Ok(self
+            .active_controllers
             .contains_key(&controller.instance_id()));
     }
 

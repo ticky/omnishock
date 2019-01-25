@@ -588,8 +588,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     // We use `game_time` to keep track of "frame" time and try to hit a
     // consistent rate at all times. We use `spin_sleep` instead of
     // `thread::Sleep` to get more accurate sleep times on all platforms.
-    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
     use game_time::framerate::RunningAverageSampler;
+    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
 
     let mut clock = GameClock::new();
     let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
@@ -1071,8 +1071,8 @@ mod tests {
     #[test]
     fn controller_map_twenty_byte_works() {
         use super::controller_map_twenty_byte;
-        use DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
+        use DUALSHOCK_MAGIC;
 
         let mut controller =
             FauxController::create_with_name(String::from("Applejack Game-player Pad"));
@@ -1276,8 +1276,8 @@ mod tests {
     #[test]
     fn controller_map_seven_byte_works() {
         use super::controller_map_seven_byte;
-        use DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
+        use DUALSHOCK_MAGIC;
 
         let mut controller =
             FauxController::create_with_name(String::from("Apple Pippin Controller"));
