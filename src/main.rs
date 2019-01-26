@@ -25,8 +25,7 @@ extern crate hex_view;
 use hex_view::HexView;
 extern crate num;
 extern crate sdl2;
-extern crate serial;
-use serial::prelude::SerialPort;
+extern crate serialport;
 extern crate spin_sleep;
 use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
@@ -426,6 +425,9 @@ fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
 ) -> std::io::Result<()> {
+    use serialport::prelude::*;
+    use std::time::Duration;
+
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator()");
 
@@ -440,16 +442,17 @@ fn send_to_ps2_controller_emulator(
         );
     }
 
-    let serial = match serial::open(device_path) {
-        Ok(mut serial) => {
-            serial.reconfigure(&|settings| {
-                settings.set_baud_rate(serial::Baud9600)?;
-                settings.set_char_size(serial::Bits8);
-                Ok(())
-            })?;
+    let serial_settings = SerialPortSettings {
+        baud_rate: 9600,
+        data_bits: DataBits::Eight,
+        flow_control: FlowControl::None,
+        parity: Parity::None,
+        stop_bits: StopBits::One,
+        timeout: Duration::from_millis(100),
+    };
 
-            serial
-        }
+    let serial = match serialport::open_with_settings(device_path, &serial_settings) {
+        Ok(mut serial) => serial,
         Err(error) => panic!("failed to open serial device: {}", error),
     };
 
