@@ -455,7 +455,7 @@ fn send_to_ps2_controller_emulator(
     };
 
     let serial = match serialport::open_with_settings(device_path, &serial_settings) {
-        Ok(mut serial) => serial,
+        Ok(serial) => serial,
         Err(error) => panic!("failed to open serial device: {}", error),
     };
 
