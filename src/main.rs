@@ -740,9 +740,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     Ok(())
 }
 
-fn send_event_to_controller<I: Read + Write>(
+fn send_event_to_controller<I: Read + Write, T: Gamepad>(
     serial: &mut I,
-    controller_manager: &sdl_manager::ControllerManager,
+    controller_manager: &T,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
     normalise_sticks: bool,
@@ -939,6 +939,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
 #[cfg(test)]
 mod tests {
+    extern crate mockstream;
+
     #[test]
     fn collapse_bits_works() {
         use super::collapse_bits;
@@ -1082,29 +1084,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
                 // Pressure values
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
 
@@ -1113,29 +1115,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
                 // Pressure values
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
 
@@ -1144,29 +1146,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
                 // Pressure values
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
 
@@ -1184,29 +1186,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                190,
+                0b10111110u8,
                 // Analog sticks
-                24,
-                198,
-                129,
-                110,
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
                 // Pressure values
-                0,
-                255,
-                0,
-                0,
-                0,
-                0,
-                255,
-                0,
-                0,
-                0,
-                255,
-                0,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
 
@@ -1215,29 +1217,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                189,
+                0b10111101u8,
                 // Analog sticks
-                24,
-                255,
-                129,
-                110,
+                0x18,
+                0xFF,
+                0x81,
+                0x6E,
                 // Pressure values
-                0,
-                255,
-                0,
-                0,
-                0,
-                0,
-                255,
-                0,
-                0,
-                0,
-                0,
-                128,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x80,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
 
@@ -1246,29 +1248,29 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                126,
+                0b01111110u8,
                 // Analog sticks
-                24,
-                198,
-                129,
-                110,
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
                 // Pressure values
-                0,
-                255,
-                0,
-                0,
-                0,
-                0,
-                0,
-                255,
-                0,
-                0,
-                255,
-                0,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
                 // Mode footer
-                85,
+                0x55,
             ]
         );
     }
@@ -1287,14 +1289,14 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
             ]
         );
 
@@ -1303,14 +1305,14 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
             ]
         );
 
@@ -1319,14 +1321,14 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                255,
+                0b11111111u8,
                 // buttons2
-                255,
+                0b11111111u8,
                 // Analog sticks
-                128,
-                128,
-                128,
-                128,
+                0x80,
+                0x80,
+                0x80,
+                0x80,
             ]
         );
 
@@ -1344,14 +1346,14 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                190,
+                0b10111110u8,
                 // Analog sticks
-                24,
-                198,
-                129,
-                110,
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
             ]
         );
 
@@ -1360,14 +1362,14 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                189,
+                0b10111101u8,
                 // Analog sticks
-                24,
-                255,
-                129,
-                110,
+                0x18,
+                0xFF,
+                0x81,
+                0x6E,
             ]
         );
 
@@ -1376,14 +1378,106 @@ mod tests {
             vec![
                 DUALSHOCK_MAGIC,
                 // buttons1
-                127,
+                0b01111111u8,
                 // buttons2
-                126,
+                0b01111110u8,
                 // Analog sticks
-                24,
-                198,
-                129,
-                110,
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
+            ]
+        );
+    }
+
+    #[test]
+    fn send_event_to_controller_works() {
+        use self::mockstream::SharedMockStream;
+        use super::send_event_to_controller;
+        use super::ControllerEmulatorPacketType;
+        use DUALSHOCK_MAGIC;
+        use SEVEN_BYTE_OK_RESPONSE;
+        use TWENTY_BYTE_OK_HEADER;
+
+        let controller = FauxController::create_with_name(String::from("Apple Pippin Controller"));
+
+        let seven_byte_console_response = vec![SEVEN_BYTE_OK_RESPONSE as u8];
+
+        let mut serial = SharedMockStream::new();
+        serial.push_bytes_to_read(&seven_byte_console_response);
+
+        assert_eq!(
+            send_event_to_controller(
+                &mut serial,
+                &controller,
+                &ControllerEmulatorPacketType::SevenByte,
+                "normal",
+                false,
+                false,
+            )
+            .unwrap(),
+            seven_byte_console_response
+        );
+        assert_eq!(
+            serial.pop_bytes_written(),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+            ]
+        );
+
+        let twenty_byte_console_response = vec![TWENTY_BYTE_OK_HEADER, 0x00, 0x00];
+
+        serial.push_bytes_to_read(&twenty_byte_console_response);
+
+        assert_eq!(
+            send_event_to_controller(
+                &mut serial,
+                &controller,
+                &ControllerEmulatorPacketType::TwentyByte,
+                "normal",
+                false,
+                false,
+            )
+            .unwrap(),
+            twenty_byte_console_response
+        );
+        assert_eq!(
+            serial.pop_bytes_written(),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+                // Pressure values
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                // Mode footer
+                0x55,
             ]
         );
     }
