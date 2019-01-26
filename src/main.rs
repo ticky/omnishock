@@ -39,7 +39,7 @@ extern crate flame;
 use std::fs::File;
 
 mod sdl_manager;
-use sdl_manager::Gamepad;
+use sdl_manager::GameController;
 use sdl_manager::SDLManager;
 
 // The DualShock protocol uses 0x5A in many places!
@@ -247,8 +247,8 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
     *y = y.saturating_add(*y / 10);
 }
 
-fn controller_map_seven_byte<T: Gamepad>(
-    controller_manager: &T,
+fn controller_map_seven_byte<T: GameController>(
+    controller: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
@@ -256,13 +256,13 @@ fn controller_map_seven_byte<T: Gamepad>(
     let _guard = flame::start_guard("controller_map_seven_byte()");
     // Seven byte controller map is the same as
     // the first seven bytes of the twenty-byte map!
-    let mut map = controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
+    let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
     map.truncate(7);
     return map;
 }
 
-fn controller_map_twenty_byte<T: Gamepad>(
-    controller_manager: &T,
+fn controller_map_twenty_byte<T: GameController>(
+    controller: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
@@ -273,39 +273,37 @@ fn controller_map_twenty_byte<T: Gamepad>(
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("buttons1");
     // buttons1
-    let dpad_left_value: i16 = convert_button(controller_manager.button(Button::DPadLeft));
-    let dpad_down_value: i16 = convert_button(controller_manager.button(Button::DPadDown));
-    let dpad_right_value: i16 = convert_button(controller_manager.button(Button::DPadRight));
-    let dpad_up_value: i16 = convert_button(controller_manager.button(Button::DPadUp));
-    let start_value: i16 = convert_button(controller_manager.button(Button::Start));
-    let right_stick_value: i16 = convert_button(controller_manager.button(Button::RightStick));
-    let left_stick_value: i16 = convert_button(controller_manager.button(Button::LeftStick));
-    let select_value: i16 = convert_button(controller_manager.button(Button::Back));
+    let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
+    let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
+    let dpad_right_value: i16 = convert_button(controller.button(Button::DPadRight));
+    let dpad_up_value: i16 = convert_button(controller.button(Button::DPadUp));
+    let start_value: i16 = convert_button(controller.button(Button::Start));
+    let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
+    let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
+    let select_value: i16 = convert_button(controller.button(Button::Back));
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("buttons1");
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("buttons2");
     // buttons2
-    let mut square_value: i16 = convert_button(controller_manager.button(Button::X));
-    let mut cross_value: i16 = convert_button(controller_manager.button(Button::A));
-    let circle_value: i16 = convert_button(controller_manager.button(Button::B));
-    let triangle_value: i16 = convert_button(controller_manager.button(Button::Y));
-    let r1_button_value: i16 = convert_button(controller_manager.button(Button::RightShoulder));
-    let l1_button_value: i16 = convert_button(controller_manager.button(Button::LeftShoulder));
-    let mut r2_button_value: i16 =
-        convert_half_axis_positive(controller_manager.axis(Axis::TriggerRight));
-    let mut l2_button_value: i16 =
-        convert_half_axis_positive(controller_manager.axis(Axis::TriggerLeft));
+    let mut square_value: i16 = convert_button(controller.button(Button::X));
+    let mut cross_value: i16 = convert_button(controller.button(Button::A));
+    let circle_value: i16 = convert_button(controller.button(Button::B));
+    let triangle_value: i16 = convert_button(controller.button(Button::Y));
+    let r1_button_value: i16 = convert_button(controller.button(Button::RightShoulder));
+    let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
+    let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+    let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("buttons2");
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("sticks");
-    let mut right_stick_x_value: i16 = controller_manager.axis(Axis::RightX);
-    let mut right_stick_y_value: i16 = controller_manager.axis(Axis::RightY);
-    let mut left_stick_x_value: i16 = controller_manager.axis(Axis::LeftX);
-    let mut left_stick_y_value: i16 = controller_manager.axis(Axis::LeftY);
+    let mut right_stick_x_value: i16 = controller.axis(Axis::RightX);
+    let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
+    let mut left_stick_x_value: i16 = controller.axis(Axis::LeftX);
+    let mut left_stick_y_value: i16 = controller.axis(Axis::LeftY);
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("sticks");
 
@@ -313,23 +311,23 @@ fn controller_map_twenty_byte<T: Gamepad>(
     flame::start("handle trigger_mode");
     match trigger_mode {
         "right-stick" => {
-            l2_button_value = convert_half_axis_negative(controller_manager.axis(Axis::RightY));
-            r2_button_value = convert_half_axis_positive(controller_manager.axis(Axis::RightY));
+            l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
+            r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
-            cross_value = convert_button(controller_manager.button(Button::A));
-            square_value = convert_button(controller_manager.button(Button::X));
+            cross_value = convert_button(controller.button(Button::A));
+            square_value = convert_button(controller.button(Button::X));
 
             // Combine the two raw trigger axes by subtracting one from the other
             // NOTE: This doesn't allow for both to be used at once
-            right_stick_y_value = controller_manager.axis(Axis::TriggerLeft)
-                - controller_manager.axis(Axis::TriggerRight);
+            right_stick_y_value =
+                controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button(controller_manager.button(Button::A));
-            r2_button_value = convert_button(controller_manager.button(Button::X));
+            l2_button_value = convert_button(controller.button(Button::A));
+            r2_button_value = convert_button(controller.button(Button::X));
 
-            cross_value = convert_half_axis_positive(controller_manager.axis(Axis::TriggerRight));
-            square_value = convert_half_axis_positive(controller_manager.axis(Axis::TriggerLeft));
+            cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
+            square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
         }
         _ => (),
     }
@@ -363,7 +361,7 @@ fn controller_map_twenty_byte<T: Gamepad>(
         l2_button_value,
     ];
 
-    let mode_footer = match controller_manager.button(Button::Guide) {
+    let mode_footer = match controller.button(Button::Guide) {
         true => 0xAA,
         false => 0x55,
     };
@@ -682,10 +680,10 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         // Now that we've kept track of controller additions & removals,
         // post an update for the one controller we currently care about.
         match sdl_manager.active_controllers.get_mut(&0) {
-            Some(controller_manager) => {
+            Some(controller) => {
                 let response = send_event_to_controller(
                     &mut serial,
-                    controller_manager,
+                    controller,
                     &communication_mode,
                     trigger_mode,
                     normalise_sticks,
@@ -695,9 +693,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 // If we've receieved a response from the controller, and our
                 // controller supports haptic feedback, update its haptic state
                 if !response.is_empty() {
-                    let controller_name = controller_manager.name();
+                    let controller_name = controller.name();
 
-                    match controller_manager.haptic {
+                    match controller.haptic {
                         Some(ref mut haptic) => {
                             let small_motor_intensity = response[1];
                             let large_motor_intensity = response[2];
@@ -740,9 +738,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     Ok(())
 }
 
-fn send_event_to_controller<I: Read + Write, T: Gamepad>(
+fn send_event_to_controller<I: Read + Write, T: GameController>(
     serial: &mut I,
-    controller_manager: &T,
+    controller: &T,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
     normalise_sticks: bool,
@@ -758,14 +756,13 @@ fn send_event_to_controller<I: Read + Write, T: Gamepad>(
         ControllerEmulatorPacketType::None => {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("ControllerEmulatorPacketType::None");
-            sent = controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
+            sent = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("ControllerEmulatorPacketType::SevenByte");
-            let state =
-                controller_map_seven_byte(controller_manager, trigger_mode, normalise_sticks);
+            let state = controller_map_seven_byte(controller, trigger_mode, normalise_sticks);
 
             {
                 #[cfg(feature = "flamegraph-profiling")]
@@ -796,8 +793,7 @@ fn send_event_to_controller<I: Read + Write, T: Gamepad>(
         ControllerEmulatorPacketType::TwentyByte => {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("ControllerEmulatorPacketType::TwentyByte");
-            let state =
-                controller_map_twenty_byte(controller_manager, trigger_mode, normalise_sticks);
+            let state = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
 
             {
                 #[cfg(feature = "flamegraph-profiling")]
@@ -891,10 +887,10 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                 );
 
                 match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller_manager) => {
-                        let controller_name = controller_manager.name();
+                    Some(controller) => {
+                        let controller_name = controller.name();
 
-                        match controller_manager.haptic {
+                        match controller.haptic {
                             Some(ref mut haptic) => {
                                 #[cfg(feature = "flamegraph-profiling")]
                                 let _guard = flame::start_guard("set rumble");
@@ -1025,7 +1021,7 @@ mod tests {
     }
 
     use sdl2;
-    use sdl_manager::Gamepad;
+    use sdl_manager::GameController;
     use std::collections::HashMap;
 
     struct FauxController {
@@ -1056,7 +1052,7 @@ mod tests {
         }
     }
 
-    impl Gamepad for FauxController {
+    impl GameController for FauxController {
         fn name(&self) -> String {
             self.name.clone()
         }

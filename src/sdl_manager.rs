@@ -28,7 +28,7 @@ extern crate flame;
 // Structure for passing around access to the SDL Subsystems,
 // and central place for setting up defaults
 
-pub trait Gamepad {
+pub trait GameController {
     fn name(&self) -> String;
     fn button(&self, button: sdl2::controller::Button) -> bool;
     fn axis(&self, axis: sdl2::controller::Axis) -> i16;
@@ -39,7 +39,7 @@ pub struct ControllerManager {
     pub haptic: Option<sdl2::haptic::Haptic>,
 }
 
-impl Gamepad for ControllerManager {
+impl GameController for ControllerManager {
     fn name(&self) -> String {
         self.controller.name()
     }
