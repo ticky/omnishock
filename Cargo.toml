@@ -19,7 +19,7 @@ game_time = "0.2.0"
 hex-view = "0.1.2"
 num = "0.1.42"
 sdl2 = "0.31.0"
-serial = "0.4"
+serialport = "3.2.0"
 spin_sleep = "0.3.4"
 
 [dev-dependencies]
