@@ -33,7 +33,13 @@ use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
 
+#[cfg(feature = "flamegraph-profiling")]
+extern crate flame;
+#[cfg(feature = "flamegraph-profiling")]
+use std::fs::File;
+
 mod sdl_manager;
+use sdl_manager::GameController;
 use sdl_manager::SDLManager;
 
 // The DualShock protocol uses 0x5A in many places!
@@ -64,6 +70,8 @@ enum ControllerEmulatorPacketType {
 
 fn main() {
     use clap::{AppSettings, Arg, SubCommand};
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::start("Parse Arguments");
 
     let arguments = app_from_crate!()
         .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -113,6 +121,9 @@ fn main() {
         .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
         .get_matches();
 
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::end("Parse Arguments");
+
     let mut sdl_manager = SDLManager::init();
 
     println!(
@@ -129,6 +140,11 @@ fn main() {
         }
         _ => (),
     }
+
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::dump_json(&mut File::create("flame-graph.json").unwrap()).unwrap();
 }
 
 // Misty gave me a special license exception for this stanza
@@ -136,6 +152,8 @@ fn main() {
 fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
     items: &[T],
 ) -> Result<u8, String> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("collapse_bits()");
     let mid_point = whats_the_midpoint_of_a::<T>();
 
     if !items.len() == 8 {
@@ -163,10 +181,14 @@ fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> 
 }
 
 fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("whats_the_midpoint_of_a()");
     return (T::max_value() + T::min_value()) / T::from(2);
 }
 
 fn convert_button<T: num::Bounded>(button: bool) -> T {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("convert_button()");
     return match button {
         true => T::max_value(),
         false => T::min_value(),
@@ -174,6 +196,8 @@ fn convert_button<T: num::Bounded>(button: bool) -> T {
 }
 
 fn convert_for_dualshock(number: i16) -> u8 {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("convert_for_dualshock()");
     return (number.wrapping_shr(8) + 0x80) as u8;
 }
 
@@ -182,6 +206,8 @@ fn convert_half_axis_positive<
 >(
     stick: T,
 ) -> T {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("convert_half_axis_positive()");
     // Special case the maximum values, so we don't end up with
     if stick == T::max_value() {
         return T::max_value();
@@ -206,10 +232,14 @@ fn convert_half_axis_negative<
 >(
     stick: T,
 ) -> T {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("convert_half_axis_negative()");
     return convert_half_axis_positive(stick.saturating_add(T::from(1)).neg());
 }
 
 fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("normalise_stick_as_dualshock2()");
     // Adjust stick positions to match those of the DualShock®2.
     // The DualShock®2 has a prominent outer deadzone,
     // so we shrink the usable area here by 10%.
@@ -217,11 +247,13 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
     *y = y.saturating_add(*y / 10);
 }
 
-fn controller_map_seven_byte(
-    controller: &sdl2::controller::GameController,
+fn controller_map_seven_byte<T: GameController>(
+    controller: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("controller_map_seven_byte()");
     // Seven byte controller map is the same as
     // the first seven bytes of the twenty-byte map!
     let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
@@ -229,13 +261,17 @@ fn controller_map_seven_byte(
     return map;
 }
 
-fn controller_map_twenty_byte(
-    controller: &sdl2::controller::GameController,
+fn controller_map_twenty_byte<T: GameController>(
+    controller: &T,
     trigger_mode: &str,
     normalise_sticks: bool,
 ) -> Vec<u8> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("controller_map_twenty_byte()");
     use sdl2::controller::{Axis, Button};
 
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::start("buttons1");
     // buttons1
     let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
     let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
@@ -245,7 +281,11 @@ fn controller_map_twenty_byte(
     let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
     let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
     let select_value: i16 = convert_button(controller.button(Button::Back));
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::end("buttons1");
 
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::start("buttons2");
     // buttons2
     let mut square_value: i16 = convert_button(controller.button(Button::X));
     let mut cross_value: i16 = convert_button(controller.button(Button::A));
@@ -255,12 +295,20 @@ fn controller_map_twenty_byte(
     let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
     let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
     let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::end("buttons2");
 
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::start("sticks");
     let mut right_stick_x_value: i16 = controller.axis(Axis::RightX);
     let mut right_stick_y_value: i16 = controller.axis(Axis::RightY);
     let mut left_stick_x_value: i16 = controller.axis(Axis::LeftX);
     let mut left_stick_y_value: i16 = controller.axis(Axis::LeftY);
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::end("sticks");
 
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::start("handle trigger_mode");
     match trigger_mode {
         "right-stick" => {
             l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
@@ -283,6 +331,8 @@ fn controller_map_twenty_byte(
         }
         _ => (),
     }
+    #[cfg(feature = "flamegraph-profiling")]
+    flame::end("handle trigger_mode");
 
     if normalise_sticks {
         normalise_stick_as_dualshock2(&mut right_stick_x_value, &mut right_stick_y_value);
@@ -346,6 +396,8 @@ fn controller_map_twenty_byte(
 }
 
 fn clear_serial_buffer<T: Read>(serial: &mut T) {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("clear_serial_buffer()");
     // NOTE: This should only be used with a SerialPort, as it has weird
     //       behaviour around the read method which is not implied by the Read
     //       trait. I'm hoping to find a better way to deal with this in future.
@@ -374,6 +426,9 @@ fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
 ) -> std::io::Result<()> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("send_to_ps2_controller_emulator()");
+
     let verbose = arguments.is_present("verbose");
     let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
     let device_path = command_arguments.value_of("device").unwrap();
@@ -406,6 +461,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     sdl_manager: &mut SDLManager,
     mut serial: I,
 ) -> std::io::Result<()> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("send_to_ps2_controller_emulator_via()");
     let verbose = arguments.is_present("verbose");
     let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
 
@@ -529,8 +586,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     // We use `game_time` to keep track of "frame" time and try to hit a
     // consistent rate at all times. We use `spin_sleep` instead of
     // `thread::Sleep` to get more accurate sleep times on all platforms.
-    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
     use game_time::framerate::RunningAverageSampler;
+    use game_time::{FloatDuration, FrameCount, FrameCounter, GameClock};
 
     let mut clock = GameClock::new();
     let mut counter = FrameCounter::new(60.0, RunningAverageSampler::with_max_samples(60));
@@ -545,6 +602,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000);
 
     'outer: loop {
+        #[cfg(feature = "flamegraph-profiling")]
+        let _outer_guard = flame::start_guard("frame");
         // Tick the "frame" timer and counters forward
         sim_time = clock.tick(&game_time::step::FixedStep::new(&counter));
         counter.tick(&sim_time);
@@ -581,6 +640,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
             match event {
                 Event::ControllerDeviceAdded { which, .. } => {
+                    #[cfg(feature = "flamegraph-profiling")]
+                    let _guard = flame::start_guard("Event::ControllerDeviceAdded");
                     if !sdl_manager.has_controller(which).ok().unwrap_or(true) {
                         match sdl_manager.add_controller(which) {
                             Ok(_) => {
@@ -598,6 +659,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 }
 
                 Event::ControllerDeviceRemoved { which, .. } => {
+                    #[cfg(feature = "flamegraph-profiling")]
+                    let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
                     match sdl_manager.remove_controller(which) {
                         Some(_) => {
                             println!(
@@ -617,10 +680,10 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         // Now that we've kept track of controller additions & removals,
         // post an update for the one controller we currently care about.
         match sdl_manager.active_controllers.get_mut(&0) {
-            Some(controller_manager) => {
+            Some(controller) => {
                 let response = send_event_to_controller(
                     &mut serial,
-                    controller_manager,
+                    controller,
                     &communication_mode,
                     trigger_mode,
                     normalise_sticks,
@@ -630,7 +693,9 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 // If we've receieved a response from the controller, and our
                 // controller supports haptic feedback, update its haptic state
                 if !response.is_empty() {
-                    match controller_manager.haptic {
+                    let controller_name = controller.name();
+
+                    match controller.haptic {
                         Some(ref mut haptic) => {
                             let small_motor_intensity = response[1];
                             let large_motor_intensity = response[2];
@@ -643,8 +708,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                             if verbose {
                                 println!(
                                     "Setting haptic feedback to {} for {}",
-                                    rumble_intensity,
-                                    controller_manager.controller.name()
+                                    rumble_intensity, controller_name
                                 );
                             }
 
@@ -662,50 +726,60 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
             _ => (),
         }
 
-        // Having run all our processing for this iteration, accurately sleep
-        // until we need to process the next one
-        clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
+        {
+            #[cfg(feature = "flamegraph-profiling")]
+            let _sleep_guard = flame::start_guard("post-frame sleep");
+            // Having run all our processing for this iteration, accurately sleep
+            // until we need to process the next one
+            clock.sleep_remaining_via(&counter, |rem| spin_sleeper.sleep(rem.to_std().unwrap()));
+        };
     }
 
     Ok(())
 }
 
-fn send_event_to_controller<I: Read + Write>(
+fn send_event_to_controller<I: Read + Write, T: GameController>(
     serial: &mut I,
-    controller_manager: &sdl_manager::ControllerManager,
+    controller: &T,
     communication_mode: &ControllerEmulatorPacketType,
     trigger_mode: &str,
     normalise_sticks: bool,
     verbose: bool,
 ) -> std::io::Result<Vec<u8>> {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("send_event_to_controller()");
     let sent;
     let mut bytes_received = 0;
     let mut received = vec![0; 4];
 
     match *communication_mode {
         ControllerEmulatorPacketType::None => {
-            sent = controller_map_twenty_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::None");
+            sent = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
         }
 
         ControllerEmulatorPacketType::SevenByte => {
-            let state = controller_map_seven_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::SevenByte");
+            let state = controller_map_seven_byte(controller, trigger_mode, normalise_sticks);
 
-            serial.write_all(&state)?;
-            bytes_received = match serial.read(&mut received) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    if verbose {
-                        println!("Error reading response: {}", error);
+            {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial write");
+                serial.write_all(&state)?;
+            };
+            bytes_received = {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial read");
+                match serial.read(&mut received) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        if verbose {
+                            println!("Error reading response: {}", error);
+                        }
+                        0
                     }
-                    0
                 }
             };
 
@@ -717,21 +791,26 @@ fn send_event_to_controller<I: Read + Write>(
         }
 
         ControllerEmulatorPacketType::TwentyByte => {
-            let state = controller_map_twenty_byte(
-                &controller_manager.controller,
-                trigger_mode,
-                normalise_sticks,
-            );
+            #[cfg(feature = "flamegraph-profiling")]
+            let _guard = flame::start_guard("ControllerEmulatorPacketType::TwentyByte");
+            let state = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
 
-            serial.write_all(&state)?;
-            bytes_received = match serial.read(&mut received) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    if verbose {
-                        println!("Error reading response: {}", error);
+            {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial write");
+                serial.write_all(&state)?;
+            };
+            bytes_received = {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("serial read");
+                match serial.read(&mut received) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        if verbose {
+                            println!("Error reading response: {}", error);
+                        }
+                        0
                     }
-
-                    0
                 }
             };
 
@@ -753,6 +832,8 @@ fn send_event_to_controller<I: Read + Write>(
 }
 
 fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("print_events()");
     println!("Printing all controller events...");
 
     for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
@@ -760,6 +841,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
         match event {
             Event::ControllerDeviceAdded { which, .. } => {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("Event::ControllerDeviceAdded");
                 if !sdl_manager.has_controller(which).ok().unwrap_or(true) {
                     match sdl_manager.add_controller(which) {
                         Ok(_) => {
@@ -777,6 +860,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             }
 
             Event::ControllerDeviceRemoved { which, .. } => {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
                 match sdl_manager.remove_controller(which) {
                     Some(_) => {
                         println!(
@@ -791,43 +876,52 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerAxisMotion {
                 which, axis, value, ..
             } => {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("Event::ControllerAxisMotion");
                 println!(
                     "“{}” (#{}): {:?}: {}",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     axis,
                     value
                 );
 
                 match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller_manager) => match controller_manager.haptic {
-                        Some(ref mut haptic) => {
-                            println!(
-                                "Running haptic feedback for “{}”",
-                                controller_manager.controller.name()
-                            );
-                            haptic.rumble_stop();
-                            haptic.rumble_play(1.0, 500);
+                    Some(controller) => {
+                        let controller_name = controller.name();
+
+                        match controller.haptic {
+                            Some(ref mut haptic) => {
+                                #[cfg(feature = "flamegraph-profiling")]
+                                let _guard = flame::start_guard("set rumble");
+                                println!("Running haptic feedback for “{}”", controller_name);
+                                haptic.rumble_stop();
+                                haptic.rumble_play(1.0, 500);
+                            }
+                            _ => (),
                         }
-                        _ => (),
-                    },
+                    }
                     _ => (),
                 };
             }
 
             Event::ControllerButtonDown { which, button, .. } => {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("Event::ControllerButtonDown");
                 println!(
                     "“{}” (#{}): {:?}: down",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     button
                 );
             }
 
             Event::ControllerButtonUp { which, button, .. } => {
+                #[cfg(feature = "flamegraph-profiling")]
+                let _guard = flame::start_guard("Event::ControllerButtonUp");
                 println!(
                     "“{}” (#{}): {:?}: up",
-                    sdl_manager.active_controllers[&which].controller.name(),
+                    sdl_manager.active_controllers[&which].name(),
                     which,
                     button
                 );
@@ -841,6 +935,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
 
 #[cfg(test)]
 mod tests {
+    extern crate mockstream;
+
     #[test]
     fn collapse_bits_works() {
         use super::collapse_bits;
@@ -922,5 +1018,463 @@ mod tests {
         assert_eq!(convert_button::<i64>(true), i64::max_value());
         assert_eq!(convert_button::<u8>(false), u8::min_value());
         assert_eq!(convert_button::<i64>(false), i64::min_value());
+    }
+
+    use sdl2;
+    use sdl_manager::GameController;
+    use std::collections::HashMap;
+
+    struct FauxController {
+        name: String,
+        buttons: HashMap<sdl2::controller::Button, bool>,
+        axes: HashMap<sdl2::controller::Axis, i16>,
+    }
+
+    impl FauxController {
+        fn create_with_name(name: String) -> FauxController {
+            let buttons = HashMap::new();
+            let axes = HashMap::new();
+            let new_controller = FauxController {
+                name,
+                buttons,
+                axes,
+            };
+
+            return new_controller;
+        }
+
+        fn set_button(&mut self, button: sdl2::controller::Button, value: bool) {
+            self.buttons.insert(button, value);
+        }
+
+        fn set_axis(&mut self, axis: sdl2::controller::Axis, value: i16) {
+            self.axes.insert(axis, value);
+        }
+    }
+
+    impl GameController for FauxController {
+        fn name(&self) -> String {
+            self.name.clone()
+        }
+
+        fn button(&self, button: sdl2::controller::Button) -> bool {
+            *self.buttons.get(&button).unwrap_or(&false)
+        }
+
+        fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
+            *self.axes.get(&axis).unwrap_or(&0)
+        }
+    }
+
+    #[test]
+    fn controller_map_twenty_byte_works() {
+        use super::controller_map_twenty_byte;
+        use sdl2::controller::{Axis, Button};
+        use DUALSHOCK_MAGIC;
+
+        let mut controller =
+            FauxController::create_with_name(String::from("Applejack Game-player Pad"));
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+                // Pressure values
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+                // Pressure values
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+                // Pressure values
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
+
+        // Do some stuff to the controller state, and test again
+        controller.set_button(Button::DPadLeft, true);
+        controller.set_button(Button::A, true);
+        controller.set_axis(Axis::TriggerLeft, i16::max_value());
+        controller.set_axis(Axis::RightX, -24_000);
+        controller.set_axis(Axis::RightY, 16_500);
+        controller.set_axis(Axis::LeftX, 255);
+        controller.set_axis(Axis::LeftY, -4_096);
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b10111110u8,
+                // Analog sticks
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
+                // Pressure values
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b10111101u8,
+                // Analog sticks
+                0x18,
+                0xFF,
+                0x81,
+                0x6E,
+                // Pressure values
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x80,
+                // Mode footer
+                0x55,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b01111110u8,
+                // Analog sticks
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
+                // Pressure values
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                0x00,
+                0xFF,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
+    }
+
+    #[test]
+    fn controller_map_seven_byte_works() {
+        use super::controller_map_seven_byte;
+        use sdl2::controller::{Axis, Button};
+        use DUALSHOCK_MAGIC;
+
+        let mut controller =
+            FauxController::create_with_name(String::from("Apple Pippin Controller"));
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+            ]
+        );
+
+        // Do some stuff to the controller state, and test again
+        controller.set_button(Button::DPadLeft, true);
+        controller.set_button(Button::A, true);
+        controller.set_axis(Axis::TriggerLeft, i16::max_value());
+        controller.set_axis(Axis::RightX, -24_000);
+        controller.set_axis(Axis::RightY, 16_500);
+        controller.set_axis(Axis::LeftX, 255);
+        controller.set_axis(Axis::LeftY, -4_096);
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "normal", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b10111110u8,
+                // Analog sticks
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "right-stick", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b10111101u8,
+                // Analog sticks
+                0x18,
+                0xFF,
+                0x81,
+                0x6E,
+            ]
+        );
+
+        assert_eq!(
+            controller_map_seven_byte(&controller, "cross-and-square", true),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b01111111u8,
+                // buttons2
+                0b01111110u8,
+                // Analog sticks
+                0x18,
+                0xC6,
+                0x81,
+                0x6E,
+            ]
+        );
+    }
+
+    #[test]
+    fn send_event_to_controller_works() {
+        use self::mockstream::SharedMockStream;
+        use super::send_event_to_controller;
+        use super::ControllerEmulatorPacketType;
+        use DUALSHOCK_MAGIC;
+        use SEVEN_BYTE_OK_RESPONSE;
+        use TWENTY_BYTE_OK_HEADER;
+
+        let controller = FauxController::create_with_name(String::from("Apple Pippin Controller"));
+
+        let seven_byte_console_response = vec![SEVEN_BYTE_OK_RESPONSE as u8];
+
+        let mut serial = SharedMockStream::new();
+        serial.push_bytes_to_read(&seven_byte_console_response);
+
+        assert_eq!(
+            send_event_to_controller(
+                &mut serial,
+                &controller,
+                &ControllerEmulatorPacketType::SevenByte,
+                "normal",
+                false,
+                false,
+            )
+            .unwrap(),
+            seven_byte_console_response
+        );
+        assert_eq!(
+            serial.pop_bytes_written(),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+            ]
+        );
+
+        let twenty_byte_console_response = vec![TWENTY_BYTE_OK_HEADER, 0x00, 0x00];
+
+        serial.push_bytes_to_read(&twenty_byte_console_response);
+
+        assert_eq!(
+            send_event_to_controller(
+                &mut serial,
+                &controller,
+                &ControllerEmulatorPacketType::TwentyByte,
+                "normal",
+                false,
+                false,
+            )
+            .unwrap(),
+            twenty_byte_console_response
+        );
+        assert_eq!(
+            serial.pop_bytes_written(),
+            vec![
+                DUALSHOCK_MAGIC,
+                // buttons1
+                0b11111111u8,
+                // buttons2
+                0b11111111u8,
+                // Analog sticks
+                0x80,
+                0x80,
+                0x80,
+                0x80,
+                // Pressure values
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                0x00,
+                // Mode footer
+                0x55,
+            ]
+        );
     }
 }
