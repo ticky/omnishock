@@ -448,7 +448,10 @@ fn send_to_ps2_controller_emulator(
         flow_control: FlowControl::None,
         parity: Parity::None,
         stop_bits: StopBits::One,
-        timeout: Duration::from_millis(100),
+        // This started out as 100ms, but that's HEAPS!
+        // Let's bank on it being less than half our
+        // target frame length (16ms/2) instead!
+        timeout: Duration::from_millis(8),
     };
 
     let serial = match serialport::open_with_settings(device_path, &serial_settings) {
