@@ -1385,7 +1385,7 @@ mod tests {
             ]
         );
 
-        let twenty_byte_console_response = vec![TWENTY_BYTE_OK_HEADER, 0x00, 0x00];
+        let twenty_byte_console_response = vec![TWENTY_BYTE_OK_HEADER, 0x00, 0x00, 0x55];
 
         serial.push_bytes_to_read(&twenty_byte_console_response);
 
