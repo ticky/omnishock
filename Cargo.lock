@@ -285,6 +285,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "omnishock"
 version = "0.0.6"
 dependencies = [
+ "bitflags 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.32.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "flame 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "game_time 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -19,6 +19,8 @@
  */
 
 #[macro_use]
+extern crate bitflags;
+#[macro_use]
 extern crate clap;
 extern crate game_time;
 extern crate hex_view;
@@ -65,6 +67,32 @@ enum ControllerEmulatorPacketType {
     None,       // Fallback, just log messages
     SevenByte,  // For Johnny Chung Lee's firmware
     TwentyByte, // For Aaron Clovsky's firmware
+}
+
+bitflags! {
+    struct Buttons1: u8 {
+        const Left = 0b10000000;
+        const Down = 0b01000000;
+        const Right = 0b00100000;
+        const Up = 0b00010000;
+        const Start = 0b00001000;
+        const R3 = 0b00000100;
+        const L3 = 0b00000010;
+        const Select = 0b00000001;
+    }
+}
+
+bitflags! {
+    struct Buttons2: u8 {
+        const Square = 0b10000000;
+        const Cross = 0b01000000;
+        const Circle = 0b00100000;
+        const Triangle = 0b00010000;
+        const R1 = 0b00001000;
+        const L1 = 0b00000100;
+        const R2 = 0b00000010;
+        const L2 = 0b00000001;
+    }
 }
 
 fn main() {
@@ -192,6 +220,15 @@ fn convert_button<T: num::Bounded>(button: bool) -> T {
         true => T::max_value(),
         false => T::min_value(),
     };
+}
+
+fn convert_analog<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
+    analog: T,
+) -> bool {
+    #[cfg(feature = "flamegraph-profiling")]
+    let _guard = flame::start_guard("convert_analog()");
+
+    analog > whats_the_midpoint_of_a::<T>()
 }
 
 fn convert_for_dualshock(number: i16) -> u8 {
@@ -338,27 +375,25 @@ fn controller_map_twenty_byte<T: GameController>(
         normalise_stick_as_dualshock2(&mut left_stick_x_value, &mut left_stick_y_value);
     }
 
-    let buttons1 = vec![
-        dpad_left_value,
-        dpad_down_value,
-        dpad_right_value,
-        dpad_up_value,
-        start_value,
-        right_stick_value,
-        left_stick_value,
-        select_value,
-    ];
+    let mut buttons1 = Buttons1::empty();
+    buttons1.set(Buttons1::Left, convert_analog(dpad_left_value));
+    buttons1.set(Buttons1::Down, convert_analog(dpad_down_value));
+    buttons1.set(Buttons1::Right, convert_analog(dpad_right_value));
+    buttons1.set(Buttons1::Up, convert_analog(dpad_up_value));
+    buttons1.set(Buttons1::Start, convert_analog(start_value));
+    buttons1.set(Buttons1::R3, convert_analog(right_stick_value));
+    buttons1.set(Buttons1::L3, convert_analog(left_stick_value));
+    buttons1.set(Buttons1::Select, convert_analog(select_value));
 
-    let buttons2 = vec![
-        square_value,
-        cross_value,
-        circle_value,
-        triangle_value,
-        r1_button_value,
-        l1_button_value,
-        r2_button_value,
-        l2_button_value,
-    ];
+    let mut buttons2 = Buttons2::empty();
+    buttons2.set(Buttons2::Square, convert_analog(square_value));
+    buttons2.set(Buttons2::Cross, convert_analog(cross_value));
+    buttons2.set(Buttons2::Circle, convert_analog(circle_value));
+    buttons2.set(Buttons2::Triangle, convert_analog(triangle_value));
+    buttons2.set(Buttons2::R1, convert_analog(r1_button_value));
+    buttons2.set(Buttons2::L1, convert_analog(l1_button_value));
+    buttons2.set(Buttons2::R2, convert_analog(r2_button_value));
+    buttons2.set(Buttons2::L2, convert_analog(l2_button_value));
 
     let mode_footer = match controller.button(Button::Guide) {
         true => 0xAA,
@@ -369,9 +404,9 @@ fn controller_map_twenty_byte<T: GameController>(
         DUALSHOCK_MAGIC,
         // DualShock protocol considers 0 to mean
         // pressed and 1 to mean not pressed, so
-        // we NOT the output from collapse_bits here
-        !(collapse_bits(&buttons1).unwrap()),
-        !(collapse_bits(&buttons2).unwrap()),
+        // we NOT the our bitflags here
+        !buttons1.bits(),
+        !buttons2.bits(),
         // Analog sticks
         convert_for_dualshock(right_stick_x_value),
         convert_for_dualshock(right_stick_y_value),
@@ -493,26 +528,8 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     // Send a twenty-byte, packet of a neutral controller state.
     serial.write(&vec![
         DUALSHOCK_MAGIC,
-        // Buttons (0=Pressed)
-        //┌─────────── Left
-        //│┌────────── Down
-        //││┌───────── Right
-        //│││┌──────── Up
-        //││││┌─────── [Start>
-        //│││││┌────── (R3)
-        //││││││┌───── (L3)
-        //│││││││┌──── [Select]
-        0b11111111u8,
-        0b11111111u8,
-        //│││││││└──── [L2]
-        //││││││└───── [R2]
-        //│││││└────── [L1]
-        //││││└─────── [R1]
-        //│││└──────── Triangle
-        //││└───────── Circle
-        //│└────────── Cross
-        //└─────────── Square
-
+        !Buttons1::empty().bits(),
+        !Buttons2::empty().bits(),
         // Sticks
         0x80, // Right stick X
         0x80, // Right stick Y
@@ -1075,6 +1092,7 @@ mod tests {
     #[test]
     fn controller_map_twenty_byte_works() {
         use super::controller_map_twenty_byte;
+        use super::{Buttons1, Buttons2};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1085,10 +1103,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1116,10 +1132,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "right-stick", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1147,10 +1161,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1187,10 +1199,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b10111110u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Cross | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1218,10 +1228,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "right-stick", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b10111101u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Cross | Buttons2::R2).bits(),
                 // Analog sticks
                 0x18,
                 0xFF,
@@ -1249,10 +1257,8 @@ mod tests {
             controller_map_twenty_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b01111110u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Square | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1280,6 +1286,7 @@ mod tests {
     #[test]
     fn controller_map_seven_byte_works() {
         use super::controller_map_seven_byte;
+        use super::{Buttons1, Buttons2};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1290,10 +1297,8 @@ mod tests {
             controller_map_seven_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1306,10 +1311,8 @@ mod tests {
             controller_map_seven_byte(&controller, "right-stick", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1322,10 +1325,8 @@ mod tests {
             controller_map_seven_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1347,10 +1348,8 @@ mod tests {
             controller_map_seven_byte(&controller, "normal", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b10111110u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Cross | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1363,10 +1362,8 @@ mod tests {
             controller_map_seven_byte(&controller, "right-stick", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b10111101u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Cross | Buttons2::R2).bits(),
                 // Analog sticks
                 0x18,
                 0xFF,
@@ -1379,10 +1376,8 @@ mod tests {
             controller_map_seven_byte(&controller, "cross-and-square", true),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b01111111u8,
-                // buttons2
-                0b01111110u8,
+                !Buttons1::Left.bits(),
+                !(Buttons2::Square | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1397,6 +1392,7 @@ mod tests {
         use self::mockstream::SharedMockStream;
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
+        use super::{Buttons1, Buttons2};
         use DUALSHOCK_MAGIC;
         use SEVEN_BYTE_OK_RESPONSE;
         use TWENTY_BYTE_OK_HEADER;
@@ -1424,10 +1420,8 @@ mod tests {
             serial.pop_bytes_written(),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
@@ -1456,10 +1450,8 @@ mod tests {
             serial.pop_bytes_written(),
             vec![
                 DUALSHOCK_MAGIC,
-                // buttons1
-                0b11111111u8,
-                // buttons2
-                0b11111111u8,
+                !Buttons1::empty().bits(),
+                !Buttons2::empty().bits(),
                 // Analog sticks
                 0x80,
                 0x80,
