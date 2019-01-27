@@ -41,3 +41,10 @@ For more information specific to setting up gamepads on Linux, I recommend check
 ## Running
 
 `cargo run --release`
+
+## Releasing
+
+1. Make sure both `.travis.tml` and `appveyor.yml` are specifying the same Rust versions
+2. Ensure that both files' deploy conditions are using that Rust version
+3. Tag & sign a version with `git tag -a -s [version]`
+4. Push the tag to GitHub, and watch Travis and AppVeyor cut a build
