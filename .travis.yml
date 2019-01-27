@@ -8,7 +8,7 @@ sudo: required
 
 # Bump macOS images to a new one because waiting for Homebrew to
 # install an acceptable version of Ruby is horrible
-osx_image: xcode9.1
+osx_image: xcode10.1
 
 env:
   global:
