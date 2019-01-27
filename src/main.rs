@@ -174,59 +174,28 @@ fn main() {
     flame::dump_json(&mut File::create("flame-graph.json").unwrap()).unwrap();
 }
 
-// Misty gave me a special license exception for this stanza
-// <https://twitter.com/mistydemeo/status/914745750369714176>
-fn collapse_bits<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
-    items: &[T],
-) -> Result<u8, String> {
-    #[cfg(feature = "flamegraph-profiling")]
-    let _guard = flame::start_guard("collapse_bits()");
-    let mid_point = whats_the_midpoint_of_a::<T>();
-
-    if !items.len() == 8 {
-        return Err(format!(
-            "Input must be 8 items long ({} provided)",
-            items.len()
-        ));
-    }
-
-    let mut result = 0;
-
-    // We process from most significant to least significant digit
-    for (i, byte) in items.iter().enumerate() {
-        let mask = u8::max_value() >> i;
-
-        // Are we setting this bit to 0 or 1?
-        if *byte > mid_point {
-            result |= mask;
-        } else {
-            result &= !mask;
-        }
-    }
-
-    return Ok(result);
-}
-
 fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("whats_the_midpoint_of_a()");
     return (T::max_value() + T::min_value()) / T::from(2);
 }
 
-fn convert_button<T: num::Bounded>(button: bool) -> T {
+fn convert_button_to_analog<T: num::Bounded>(button: bool) -> T {
     #[cfg(feature = "flamegraph-profiling")]
-    let _guard = flame::start_guard("convert_button()");
+    let _guard = flame::start_guard("convert_button_to_analog()");
     return match button {
         true => T::max_value(),
         false => T::min_value(),
     };
 }
 
-fn convert_analog<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd>(
+fn convert_analog_to_button<
+    T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8> + PartialOrd,
+>(
     analog: T,
 ) -> bool {
     #[cfg(feature = "flamegraph-profiling")]
-    let _guard = flame::start_guard("convert_analog()");
+    let _guard = flame::start_guard("convert_analog_to_button()");
 
     analog > whats_the_midpoint_of_a::<T>()
 }
@@ -309,26 +278,26 @@ fn controller_map_twenty_byte<T: GameController>(
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("buttons1");
     // buttons1
-    let dpad_left_value: i16 = convert_button(controller.button(Button::DPadLeft));
-    let dpad_down_value: i16 = convert_button(controller.button(Button::DPadDown));
-    let dpad_right_value: i16 = convert_button(controller.button(Button::DPadRight));
-    let dpad_up_value: i16 = convert_button(controller.button(Button::DPadUp));
-    let start_value: i16 = convert_button(controller.button(Button::Start));
-    let right_stick_value: i16 = convert_button(controller.button(Button::RightStick));
-    let left_stick_value: i16 = convert_button(controller.button(Button::LeftStick));
-    let select_value: i16 = convert_button(controller.button(Button::Back));
+    let dpad_left_value: i16 = convert_button_to_analog(controller.button(Button::DPadLeft));
+    let dpad_down_value: i16 = convert_button_to_analog(controller.button(Button::DPadDown));
+    let dpad_right_value: i16 = convert_button_to_analog(controller.button(Button::DPadRight));
+    let dpad_up_value: i16 = convert_button_to_analog(controller.button(Button::DPadUp));
+    let start_value: i16 = convert_button_to_analog(controller.button(Button::Start));
+    let right_stick_value: i16 = convert_button_to_analog(controller.button(Button::RightStick));
+    let left_stick_value: i16 = convert_button_to_analog(controller.button(Button::LeftStick));
+    let select_value: i16 = convert_button_to_analog(controller.button(Button::Back));
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("buttons1");
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("buttons2");
     // buttons2
-    let mut square_value: i16 = convert_button(controller.button(Button::X));
-    let mut cross_value: i16 = convert_button(controller.button(Button::A));
-    let circle_value: i16 = convert_button(controller.button(Button::B));
-    let triangle_value: i16 = convert_button(controller.button(Button::Y));
-    let r1_button_value: i16 = convert_button(controller.button(Button::RightShoulder));
-    let l1_button_value: i16 = convert_button(controller.button(Button::LeftShoulder));
+    let mut square_value: i16 = convert_button_to_analog(controller.button(Button::X));
+    let mut cross_value: i16 = convert_button_to_analog(controller.button(Button::A));
+    let circle_value: i16 = convert_button_to_analog(controller.button(Button::B));
+    let triangle_value: i16 = convert_button_to_analog(controller.button(Button::Y));
+    let r1_button_value: i16 = convert_button_to_analog(controller.button(Button::RightShoulder));
+    let l1_button_value: i16 = convert_button_to_analog(controller.button(Button::LeftShoulder));
     let mut r2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
     let mut l2_button_value: i16 = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
     #[cfg(feature = "flamegraph-profiling")]
@@ -350,8 +319,8 @@ fn controller_map_twenty_byte<T: GameController>(
             l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
             r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
-            cross_value = convert_button(controller.button(Button::A));
-            square_value = convert_button(controller.button(Button::X));
+            cross_value = convert_button_to_analog(controller.button(Button::A));
+            square_value = convert_button_to_analog(controller.button(Button::X));
 
             // Combine the two raw trigger axes by subtracting one from the other
             // NOTE: This doesn't allow for both to be used at once
@@ -359,8 +328,8 @@ fn controller_map_twenty_byte<T: GameController>(
                 controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
         "cross-and-square" => {
-            l2_button_value = convert_button(controller.button(Button::A));
-            r2_button_value = convert_button(controller.button(Button::X));
+            l2_button_value = convert_button_to_analog(controller.button(Button::A));
+            r2_button_value = convert_button_to_analog(controller.button(Button::X));
 
             cross_value = convert_half_axis_positive(controller.axis(Axis::TriggerRight));
             square_value = convert_half_axis_positive(controller.axis(Axis::TriggerLeft));
@@ -376,24 +345,24 @@ fn controller_map_twenty_byte<T: GameController>(
     }
 
     let mut buttons1 = Buttons1::empty();
-    buttons1.set(Buttons1::Left, convert_analog(dpad_left_value));
-    buttons1.set(Buttons1::Down, convert_analog(dpad_down_value));
-    buttons1.set(Buttons1::Right, convert_analog(dpad_right_value));
-    buttons1.set(Buttons1::Up, convert_analog(dpad_up_value));
-    buttons1.set(Buttons1::Start, convert_analog(start_value));
-    buttons1.set(Buttons1::R3, convert_analog(right_stick_value));
-    buttons1.set(Buttons1::L3, convert_analog(left_stick_value));
-    buttons1.set(Buttons1::Select, convert_analog(select_value));
+    buttons1.set(Buttons1::Left, convert_analog_to_button(dpad_left_value));
+    buttons1.set(Buttons1::Down, convert_analog_to_button(dpad_down_value));
+    buttons1.set(Buttons1::Right, convert_analog_to_button(dpad_right_value));
+    buttons1.set(Buttons1::Up, convert_analog_to_button(dpad_up_value));
+    buttons1.set(Buttons1::Start, convert_analog_to_button(start_value));
+    buttons1.set(Buttons1::R3, convert_analog_to_button(right_stick_value));
+    buttons1.set(Buttons1::L3, convert_analog_to_button(left_stick_value));
+    buttons1.set(Buttons1::Select, convert_analog_to_button(select_value));
 
     let mut buttons2 = Buttons2::empty();
-    buttons2.set(Buttons2::Square, convert_analog(square_value));
-    buttons2.set(Buttons2::Cross, convert_analog(cross_value));
-    buttons2.set(Buttons2::Circle, convert_analog(circle_value));
-    buttons2.set(Buttons2::Triangle, convert_analog(triangle_value));
-    buttons2.set(Buttons2::R1, convert_analog(r1_button_value));
-    buttons2.set(Buttons2::L1, convert_analog(l1_button_value));
-    buttons2.set(Buttons2::R2, convert_analog(r2_button_value));
-    buttons2.set(Buttons2::L2, convert_analog(l2_button_value));
+    buttons2.set(Buttons2::Square, convert_analog_to_button(square_value));
+    buttons2.set(Buttons2::Cross, convert_analog_to_button(cross_value));
+    buttons2.set(Buttons2::Circle, convert_analog_to_button(circle_value));
+    buttons2.set(Buttons2::Triangle, convert_analog_to_button(triangle_value));
+    buttons2.set(Buttons2::R1, convert_analog_to_button(r1_button_value));
+    buttons2.set(Buttons2::L1, convert_analog_to_button(l1_button_value));
+    buttons2.set(Buttons2::R2, convert_analog_to_button(r2_button_value));
+    buttons2.set(Buttons2::L2, convert_analog_to_button(l2_button_value));
 
     let mode_footer = match controller.button(Button::Guide) {
         true => 0xAA,
@@ -961,33 +930,6 @@ mod tests {
     extern crate mockstream;
 
     #[test]
-    fn collapse_bits_works() {
-        use super::collapse_bits;
-
-        assert_eq!(
-            collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
-            0
-        );
-        assert_eq!(
-            collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap(),
-            0b01000101u8
-        );
-        assert_eq!(
-            !(collapse_bits::<u8>(&vec![0, 255, 0, 0, 0, 255, 0, 255]).unwrap()),
-            0b10111010u8
-        );
-
-        assert_eq!(
-            collapse_bits::<u8>(&vec![130, 150, 170, 180, 128, 200, 220, 240]).unwrap(),
-            255
-        );
-        assert_eq!(
-            !(collapse_bits::<u8>(&vec![0, 0, 0, 0, 0, 0, 0, 0]).unwrap()),
-            255
-        );
-    }
-
-    #[test]
     fn convert_half_axis_positive_is_accurate() {
         use super::convert_half_axis_positive;
 
@@ -1034,13 +976,26 @@ mod tests {
     }
 
     #[test]
-    fn convert_button_is_accurate() {
-        use super::convert_button;
+    fn convert_button_to_analog_is_accurate() {
+        use super::convert_button_to_analog;
 
-        assert_eq!(convert_button::<u8>(true), u8::max_value());
-        assert_eq!(convert_button::<i64>(true), i64::max_value());
-        assert_eq!(convert_button::<u8>(false), u8::min_value());
-        assert_eq!(convert_button::<i64>(false), i64::min_value());
+        assert_eq!(convert_button_to_analog::<u8>(true), u8::max_value());
+        assert_eq!(convert_button_to_analog::<i64>(true), i64::max_value());
+        assert_eq!(convert_button_to_analog::<u8>(false), u8::min_value());
+        assert_eq!(convert_button_to_analog::<i64>(false), i64::min_value());
+    }
+
+    #[test]
+    fn convert_analog_to_button_is_accurate() {
+        use super::convert_analog_to_button;
+
+        assert_eq!(convert_analog_to_button(127u8), false);
+        assert_eq!(convert_analog_to_button(128u8), true);
+
+        assert_eq!(convert_analog_to_button(u8::max_value()), true);
+        assert_eq!(convert_analog_to_button(i64::max_value()), true);
+        assert_eq!(convert_analog_to_button(u8::min_value()), false);
+        assert_eq!(convert_analog_to_button(i64::min_value()), false);
     }
 
     use sdl2;
