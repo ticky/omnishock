@@ -1,6 +1,6 @@
 /*
  * Omnishock: Something to do with game controllers!
- * Copyright (C) 2017-2018 Jessica Stokes
+ * Copyright (C) 2017-2019 Jessica Stokes
  *
  * This file is part of Omnishock.
  *
