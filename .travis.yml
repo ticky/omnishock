@@ -16,6 +16,8 @@ env:
     - LD_LIBRARY_PATH: /usr/local/lib
 
 matrix:
+  allow_failures:
+    - rust: beta
   include:
     # macOS
     - env: TARGET=x86_64-apple-darwin
