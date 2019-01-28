@@ -32,11 +32,16 @@ pub trait GameController {
     fn name(&self) -> String;
     fn button(&self, button: sdl2::controller::Button) -> bool;
     fn axis(&self, axis: sdl2::controller::Axis) -> i16;
+    fn set_rumble(
+        &mut self,
+        low_frequency_rumble: u16,
+        high_frequency_rumble: u16,
+        duration_ms: u32,
+    ) -> Result<(), String>;
 }
 
 pub struct ControllerManager {
     controller: sdl2::controller::GameController,
-    pub haptic: Option<sdl2::haptic::Haptic>,
 }
 
 impl GameController for ControllerManager {
@@ -51,12 +56,29 @@ impl GameController for ControllerManager {
     fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
         self.controller.axis(axis)
     }
+
+    fn set_rumble(
+        &mut self,
+        low_frequency_rumble: u16,
+        high_frequency_rumble: u16,
+        duration_ms: u32,
+    ) -> Result<(), String> {
+        match self
+            .controller
+            .set_rumble(low_frequency_rumble, high_frequency_rumble, duration_ms)
+        {
+            Ok(_) => Ok(()),
+            Err(error) => match error {
+                sdl2::IntegerOrSdlError::SdlError(string) => Err(string),
+                _ => Err("SDL gave an integer error while setting rumble. WTF?".to_string()),
+            },
+        }
+    }
 }
 
 pub struct SDLManager {
     pub context: sdl2::Sdl,
     pub video_subsystem: Option<sdl2::VideoSubsystem>,
-    pub haptic_subsystem: sdl2::HapticSubsystem,
     pub game_controller_subsystem: sdl2::GameControllerSubsystem,
     pub active_controllers: HashMap<i32, ControllerManager>,
 }
@@ -65,7 +87,7 @@ impl SDLManager {
     pub fn init() -> Result<SDLManager, String> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager::init()");
-        // Initialise SDL2, plus the video, haptic & game controller subsystems
+        // Initialise SDL2, plus the video & game controller subsystems
         let context = {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("initialise sdl2 core");
@@ -86,11 +108,6 @@ impl SDLManager {
                 }
             }
         };
-        let haptic_subsystem = {
-            #[cfg(feature = "flamegraph-profiling")]
-            let _guard = flame::start_guard("initialise haptic subsystem");
-            context.haptic()?
-        };
         let game_controller_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("initialise controller subsystem");
@@ -103,7 +120,6 @@ impl SDLManager {
         let mut sdl_manager = SDLManager {
             context,
             video_subsystem,
-            haptic_subsystem,
             game_controller_subsystem,
             active_controllers,
         };
@@ -166,18 +182,9 @@ impl SDLManager {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#insert_controller()");
         let controller = self.game_controller_subsystem.open(index)?;
-        let haptic = self.haptic_subsystem.open_from_joystick_id(index).ok();
         let controller_id = controller.instance_id();
 
-        if haptic.is_none() {
-            println!(
-                "Note: “{}” (#{}) doesn't support haptic feedback.",
-                controller.name(),
-                controller_id
-            );
-        }
-
-        let controller_manager = ControllerManager { controller, haptic };
+        let controller_manager = ControllerManager { controller };
 
         self.active_controllers
             .insert(controller_id, controller_manager);

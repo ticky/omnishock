@@ -63,6 +63,10 @@ const SERIAL_HINT: &str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
 #[cfg(windows)]
 const SERIAL_HINT: &str = "\n(Usually COM3 for USB Serial on Windows.)";
 
+// How many times you need to multiply a u8 converted
+// to u16 by to become a u16 of the same magnitude
+const U8_TO_U16_MAGNITUDE: u16 = u16::max_value() / u8::max_value() as u16;
+
 enum ControllerEmulatorPacketType {
     None,       // Fallback, just log messages
     SevenByte,  // For Johnny Chung Lee's firmware
@@ -683,33 +687,27 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 verbose,
             )?;
 
-            // If we've receieved a response from the controller, and our
-            // controller supports haptic feedback, update its haptic state
+            // If we've receieved a response from the controller,
+            // try updating its haptic state
             if !response.is_empty() {
-                let controller_name = controller.name();
+                let small_motor_intensity = u16::from(response[1]) * U8_TO_U16_MAGNITUDE;
+                let large_motor_intensity = u16::from(response[2]) * U8_TO_U16_MAGNITUDE;
 
-                if let Some(ref mut haptic) = controller.haptic {
-                    let small_motor_intensity = response[1];
-                    let large_motor_intensity = response[2];
+                if verbose {
+                    println!(
+                        "“{}”: Setting rumble to ({},{})",
+                        controller.name(),
+                        small_motor_intensity,
+                        large_motor_intensity
+                    );
+                }
 
-                    // We calculate the rumble intensity as 1/3 of the small
-                    // motor, plus the full intensity of the large motor
-                    let rumble_intensity = f32::from(small_motor_intensity) / 255.0 / 3.0
-                        + f32::from(large_motor_intensity) / 255.0;
-
-                    if verbose {
-                        println!(
-                            "Setting haptic feedback to {} for {}",
-                            rumble_intensity, controller_name
-                        );
-                    }
-
-                    // NOTE: Should probably be an <https://wiki.libsdl.org/SDL_HapticLeftRight>,
-                    //       but the `sdl2` crate doesn't yet support it.
-                    haptic.rumble_stop();
-                    if rumble_intensity > 0.0 {
-                        haptic.rumble_play(rumble_intensity, 500);
-                    }
+                // We don't care if `set_rumble` actually worked,
+                // because if it's unsupported, it won't break anything,
+                // so we just ignore the result entirely here.
+                #[allow(unused_must_use)]
+                {
+                    controller.set_rumble(small_motor_intensity, large_motor_intensity, 500);
                 }
             }
         }
@@ -875,14 +873,17 @@ fn print_events(
                 );
 
                 if let Some(controller) = sdl_manager.active_controllers.get_mut(&which) {
-                    let controller_name = controller.name();
+                    #[cfg(feature = "flamegraph-profiling")]
+                    let _guard = flame::start_guard("set rumble");
 
-                    if let Some(ref mut haptic) = controller.haptic {
-                        #[cfg(feature = "flamegraph-profiling")]
-                        let _guard = flame::start_guard("set rumble");
-                        println!("Running haptic feedback for “{}”", controller_name);
-                        haptic.rumble_stop();
-                        haptic.rumble_play(1.0, 500);
+                    println!("“{}”: Rumbling", controller.name());
+
+                    // We don't care if `set_rumble` actually worked,
+                    // because if it's unsupported, it won't break anything,
+                    // so we just ignore the result entirely here.
+                    #[allow(unused_must_use)]
+                    {
+                        controller.set_rumble(0xFFFF, 0xFFFF, 500);
                     }
                 };
             }
@@ -1034,6 +1035,15 @@ mod tests {
 
         fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
             *self.axes.get(&axis).unwrap_or(&0)
+        }
+
+        fn set_rumble(
+            &mut self,
+            _low_frequency_rumble: u16,
+            _high_frequency_rumble: u16,
+            _duration_ms: u32,
+        ) -> Result<(), String> {
+            Ok(())
         }
     }
 
