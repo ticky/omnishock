@@ -3,7 +3,7 @@
 $SRC_DIR = $PWD.Path
 
 Set-Location $ENV:Temp
-$SDL_VERSION = "2.0.8"
+$SDL_VERSION = "2.0.9"
 $ZIP_FILE = (Join-Path $PWD.Path "SDL2-devel-${SDL_VERSION}-VC.zip")
 
 Invoke-WebRequest -OutFile "$ZIP_FILE" "https://www.libsdl.org/release/SDL2-devel-${SDL_VERSION}-VC.zip"
