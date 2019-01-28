@@ -57,11 +57,11 @@ const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
 // Serial port name hint is different per-OS
 #[cfg(target_os = "macos")]
-const SERIAL_HINT: &'static str = "\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
+const SERIAL_HINT: &str = "\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
 #[cfg(all(unix, not(target_os = "macos")))]
-const SERIAL_HINT: &'static str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
+const SERIAL_HINT: &str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
 #[cfg(windows)]
-const SERIAL_HINT: &'static str = "\n(Usually COM3 for USB Serial on Windows.)";
+const SERIAL_HINT: &str = "\n(Usually COM3 for USB Serial on Windows.)";
 
 enum ControllerEmulatorPacketType {
     None,       // Fallback, just log messages
@@ -71,31 +71,31 @@ enum ControllerEmulatorPacketType {
 
 bitflags! {
     struct Buttons1: u8 {
-        const Left = 0b10000000;
-        const Down = 0b01000000;
-        const Right = 0b00100000;
-        const Up = 0b00010000;
-        const Start = 0b00001000;
-        const R3 = 0b00000100;
-        const L3 = 0b00000010;
-        const Select = 0b00000001;
+        const Left = 0b1000_0000;
+        const Down = 0b0100_0000;
+        const Right = 0b0010_0000;
+        const Up = 0b0001_0000;
+        const Start = 0b0000_1000;
+        const R3 = 0b0000_0100;
+        const L3 = 0b0000_0010;
+        const Select = 0b0000_0001;
     }
 }
 
 bitflags! {
     struct Buttons2: u8 {
-        const Square = 0b10000000;
-        const Cross = 0b01000000;
-        const Circle = 0b00100000;
-        const Triangle = 0b00010000;
-        const R1 = 0b00001000;
-        const L1 = 0b00000100;
-        const R2 = 0b00000010;
-        const L2 = 0b00000001;
+        const Square = 0b1000_0000;
+        const Cross = 0b0100_0000;
+        const Circle = 0b0010_0000;
+        const Triangle = 0b0001_0000;
+        const R1 = 0b0000_1000;
+        const L1 = 0b0000_0100;
+        const R2 = 0b0000_0010;
+        const L2 = 0b0000_0001;
     }
 }
 
-fn main() {
+fn main() -> Result<(), Box<std::error::Error>> {
     use clap::{AppSettings, Arg, SubCommand};
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("Parse Arguments");
@@ -151,7 +151,7 @@ fn main() {
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("Parse Arguments");
 
-    let mut sdl_manager = SDLManager::init();
+    let mut sdl_manager = SDLManager::init()?;
 
     println!(
         "(There are {} controllers connected)",
@@ -160,33 +160,36 @@ fn main() {
 
     match arguments.subcommand_name() {
         Some("ps2ce") => {
-            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager).unwrap();
+            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager)?;
         }
         Some("test") => {
-            print_events(&arguments, &mut sdl_manager);
+            print_events(&arguments, &mut sdl_manager)?;
         }
         _ => (),
     }
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
+    flame::dump_html(&mut File::create("flame-graph.html")?)?;
     #[cfg(feature = "flamegraph-profiling")]
-    flame::dump_json(&mut File::create("flame-graph.json").unwrap()).unwrap();
+    flame::dump_json(&mut File::create("flame-graph.json")?)?;
+
+    Ok(())
 }
 
 fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("whats_the_midpoint_of_a()");
-    return (T::max_value() + T::min_value()) / T::from(2);
+    (T::max_value() + T::min_value()) / T::from(2)
 }
 
 fn convert_button_to_analog<T: num::Bounded>(button: bool) -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_button_to_analog()");
-    return match button {
-        true => T::max_value(),
-        false => T::min_value(),
-    };
+    if button {
+        T::max_value()
+    } else {
+        T::min_value()
+    }
 }
 
 fn convert_analog_to_button<
@@ -203,7 +206,7 @@ fn convert_analog_to_button<
 fn convert_for_dualshock(number: i16) -> u8 {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_for_dualshock()");
-    return (number.wrapping_shr(8) + 0x80) as u8;
+    (number.wrapping_shr(8) + 0x80) as u8
 }
 
 fn convert_half_axis_positive<
@@ -223,7 +226,7 @@ fn convert_half_axis_positive<
     let normalised_stick = stick.saturating_add(half_minimum);
 
     // This is a weird way to multiply by two but it works eh
-    return normalised_stick.saturating_add(normalised_stick);
+    normalised_stick.saturating_add(normalised_stick)
 }
 
 fn convert_half_axis_negative<
@@ -239,7 +242,7 @@ fn convert_half_axis_negative<
 ) -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_half_axis_negative()");
-    return convert_half_axis_positive(stick.saturating_add(T::from(1)).neg());
+    convert_half_axis_positive(stick.saturating_add(T::from(1)).neg())
 }
 
 fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
@@ -263,7 +266,7 @@ fn controller_map_seven_byte<T: GameController>(
     // the first seven bytes of the twenty-byte map!
     let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
     map.truncate(7);
-    return map;
+    map
 }
 
 fn controller_map_twenty_byte<T: GameController>(
@@ -364,9 +367,10 @@ fn controller_map_twenty_byte<T: GameController>(
     buttons2.set(Buttons2::R2, convert_analog_to_button(r2_button_value));
     buttons2.set(Buttons2::L2, convert_analog_to_button(l2_button_value));
 
-    let mode_footer = match controller.button(Button::Guide) {
-        true => 0xAA,
-        false => 0x55,
+    let mode_footer = if controller.button(Button::Guide) {
+        0xAA
+    } else {
+        0x55
     };
 
     return vec![
@@ -428,7 +432,7 @@ fn clear_serial_buffer<T: Read>(serial: &mut T) {
 fn send_to_ps2_controller_emulator(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
-) -> std::io::Result<()> {
+) -> Result<(), Box<std::error::Error>> {
     use serialport::prelude::*;
     use std::time::Duration;
 
@@ -470,7 +474,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     arguments: &clap::ArgMatches,
     sdl_manager: &mut SDLManager,
     mut serial: I,
-) -> std::io::Result<()> {
+) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator_via()");
     let verbose = arguments.is_present("verbose");
@@ -495,7 +499,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     }
 
     // Send a twenty-byte, packet of a neutral controller state.
-    serial.write(&vec![
+    serial.write_all(&[
         DUALSHOCK_MAGIC,
         !Buttons1::empty().bits(),
         !Buttons2::empty().bits(),
@@ -564,16 +568,17 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
         println!("Using trigger mode '{}'...", trigger_mode);
     }
 
-    let normalise_sticks = command_arguments.is_present("no-stick-normalise") == false;
+    let normalise_sticks = !command_arguments.is_present("no-stick-normalise");
 
     if verbose {
-        match normalise_sticks {
-            true => println!("Normalising stick extents (stick values * 1.1)"),
-            false => println!("Not normalising stick extents"),
+        if normalise_sticks {
+            println!("Normalising stick extents (stick values * 1.1)")
+        } else {
+            println!("Not normalising stick extents")
         }
     }
 
-    let mut event_pump = sdl_manager.context.event_pump().unwrap();
+    let mut event_pump = sdl_manager.context.event_pump()?;
 
     // We use `game_time` to keep track of "frame" time and try to hit a
     // consistent rate at all times. We use `spin_sleep` instead of
@@ -653,14 +658,11 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 Event::ControllerDeviceRemoved { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
                     let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
-                    match sdl_manager.remove_controller(which) {
-                        Some(_) => {
-                            println!(
-                                "(There are {} controllers connected)",
-                                sdl_manager.active_controllers.len()
-                            );
-                        }
-                        None => (),
+                    if sdl_manager.remove_controller(which).is_some() {
+                        println!(
+                            "(There are {} controllers connected)",
+                            sdl_manager.active_controllers.len()
+                        );
                     };
                 }
 
@@ -671,51 +673,45 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
         // Now that we've kept track of controller additions & removals,
         // post an update for the one controller we currently care about.
-        match sdl_manager.active_controllers.get_mut(&0) {
-            Some(controller) => {
-                let response = send_event_to_controller(
-                    &mut serial,
-                    controller,
-                    &communication_mode,
-                    trigger_mode,
-                    normalise_sticks,
-                    verbose,
-                )?;
+        if let Some(controller) = sdl_manager.active_controllers.get_mut(&0) {
+            let response = send_event_to_controller(
+                &mut serial,
+                controller,
+                &communication_mode,
+                trigger_mode,
+                normalise_sticks,
+                verbose,
+            )?;
 
-                // If we've receieved a response from the controller, and our
-                // controller supports haptic feedback, update its haptic state
-                if !response.is_empty() {
-                    let controller_name = controller.name();
+            // If we've receieved a response from the controller, and our
+            // controller supports haptic feedback, update its haptic state
+            if !response.is_empty() {
+                let controller_name = controller.name();
 
-                    match controller.haptic {
-                        Some(ref mut haptic) => {
-                            let small_motor_intensity = response[1];
-                            let large_motor_intensity = response[2];
+                if let Some(ref mut haptic) = controller.haptic {
+                    let small_motor_intensity = response[1];
+                    let large_motor_intensity = response[2];
 
-                            // We calculate the rumble intensity as 1/3 of the small
-                            // motor, plus the full intensity of the large motor
-                            let rumble_intensity = small_motor_intensity as f32 / 255.0 / 3.0
-                                + large_motor_intensity as f32 / 255.0;
+                    // We calculate the rumble intensity as 1/3 of the small
+                    // motor, plus the full intensity of the large motor
+                    let rumble_intensity = f32::from(small_motor_intensity) / 255.0 / 3.0
+                        + f32::from(large_motor_intensity) / 255.0;
 
-                            if verbose {
-                                println!(
-                                    "Setting haptic feedback to {} for {}",
-                                    rumble_intensity, controller_name
-                                );
-                            }
+                    if verbose {
+                        println!(
+                            "Setting haptic feedback to {} for {}",
+                            rumble_intensity, controller_name
+                        );
+                    }
 
-                            // NOTE: Should probably be an <https://wiki.libsdl.org/SDL_HapticLeftRight>,
-                            //       but the `sdl2` crate doesn't yet support it.
-                            haptic.rumble_stop();
-                            if rumble_intensity > 0.0 {
-                                haptic.rumble_play(rumble_intensity, 500);
-                            }
-                        }
-                        _ => (),
+                    // NOTE: Should probably be an <https://wiki.libsdl.org/SDL_HapticLeftRight>,
+                    //       but the `sdl2` crate doesn't yet support it.
+                    haptic.rumble_stop();
+                    if rumble_intensity > 0.0 {
+                        haptic.rumble_play(rumble_intensity, 500);
                     }
                 }
             }
-            _ => (),
         }
 
         {
@@ -737,7 +733,7 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     trigger_mode: &str,
     normalise_sticks: bool,
     verbose: bool,
-) -> std::io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_event_to_controller()");
     let sent;
@@ -823,12 +819,15 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     Ok(received)
 }
 
-fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
+fn print_events(
+    _arguments: &clap::ArgMatches,
+    sdl_manager: &mut SDLManager,
+) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("print_events()");
     println!("Printing all controller events...");
 
-    for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
+    for event in sdl_manager.context.event_pump()?.wait_iter() {
         use sdl2::event::Event;
 
         match event {
@@ -854,14 +853,11 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerDeviceRemoved { which, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
                 let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
-                match sdl_manager.remove_controller(which) {
-                    Some(_) => {
-                        println!(
-                            "(There are {} controllers connected)",
-                            sdl_manager.active_controllers.len()
-                        );
-                    }
-                    None => (),
+                if sdl_manager.remove_controller(which).is_some() {
+                    println!(
+                        "(There are {} controllers connected)",
+                        sdl_manager.active_controllers.len()
+                    );
                 };
             }
 
@@ -878,22 +874,16 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                     value
                 );
 
-                match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller) => {
-                        let controller_name = controller.name();
+                if let Some(controller) = sdl_manager.active_controllers.get_mut(&which) {
+                    let controller_name = controller.name();
 
-                        match controller.haptic {
-                            Some(ref mut haptic) => {
-                                #[cfg(feature = "flamegraph-profiling")]
-                                let _guard = flame::start_guard("set rumble");
-                                println!("Running haptic feedback for “{}”", controller_name);
-                                haptic.rumble_stop();
-                                haptic.rumble_play(1.0, 500);
-                            }
-                            _ => (),
-                        }
+                    if let Some(ref mut haptic) = controller.haptic {
+                        #[cfg(feature = "flamegraph-profiling")]
+                        let _guard = flame::start_guard("set rumble");
+                        println!("Running haptic feedback for “{}”", controller_name);
+                        haptic.rumble_stop();
+                        haptic.rumble_play(1.0, 500);
                     }
-                    _ => (),
                 };
             }
 
@@ -923,6 +913,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             _ => (),
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -963,6 +955,7 @@ mod tests {
 
     #[test]
     fn whats_the_midpoint_of_a_is_accurate() {
+        #![allow(clippy::float_cmp)]
         use super::whats_the_midpoint_of_a;
 
         assert_eq!(whats_the_midpoint_of_a::<u8>(), 127_u8);
@@ -972,6 +965,8 @@ mod tests {
         );
         assert_eq!(whats_the_midpoint_of_a::<i16>(), 0_i16);
         assert_eq!(whats_the_midpoint_of_a::<i64>(), 0_i64);
+        // NOTE: This would normally trip the `clippy::float_cmp` rule,
+        //       which is why we've explicitly allowed it above.
         assert_eq!(whats_the_midpoint_of_a::<f32>(), 0_f32);
     }
 
@@ -1012,13 +1007,11 @@ mod tests {
         fn create_with_name(name: String) -> FauxController {
             let buttons = HashMap::new();
             let axes = HashMap::new();
-            let new_controller = FauxController {
+            FauxController {
                 name,
                 buttons,
                 axes,
-            };
-
-            return new_controller;
+            }
         }
 
         fn set_button(&mut self, button: sdl2::controller::Button, value: bool) {
@@ -1343,7 +1336,7 @@ mod tests {
     }
 
     #[test]
-    fn send_event_to_controller_works() {
+    fn send_event_to_controller_works() -> Result<(), Box<std::error::Error>> {
         use self::mockstream::SharedMockStream;
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
@@ -1367,8 +1360,7 @@ mod tests {
                 "normal",
                 false,
                 false,
-            )
-            .unwrap(),
+            )?,
             seven_byte_console_response
         );
         assert_eq!(
@@ -1397,8 +1389,7 @@ mod tests {
                 "normal",
                 false,
                 false,
-            )
-            .unwrap(),
+            )?,
             twenty_byte_console_response
         );
         assert_eq!(
@@ -1429,5 +1420,7 @@ mod tests {
                 0x55,
             ]
         );
+
+        Ok(())
     }
 }

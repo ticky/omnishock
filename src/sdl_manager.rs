@@ -62,14 +62,14 @@ pub struct SDLManager {
 }
 
 impl SDLManager {
-    pub fn init() -> SDLManager {
+    pub fn init() -> Result<SDLManager, String> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager::init()");
         // Initialise SDL2, plus the video, haptic & game controller subsystems
         let context = {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("initialise sdl2 core");
-            sdl2::init().unwrap()
+            sdl2::init()?
         };
         /* NOTE: The video subsystem is not currently used, except for the side
          *       effect that it prevents the system from triggering the screen
@@ -89,12 +89,12 @@ impl SDLManager {
         let haptic_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("initialise haptic subsystem");
-            context.haptic().unwrap()
+            context.haptic()?
         };
         let game_controller_subsystem = {
             #[cfg(feature = "flamegraph-profiling")]
             let _guard = flame::start_guard("initialise controller subsystem");
-            context.game_controller().unwrap()
+            context.game_controller()?
         };
 
         // Keep track of the controllers we know of
@@ -122,9 +122,8 @@ impl SDLManager {
         // as it turns out doing them together can break without warning
         // if the file's syntax is ever invalid
         for mapping in controller_mappings {
-            match sdl_manager.game_controller_subsystem.add_mapping(mapping) {
-                Err(error) => panic!("failed to load mapping: {}", error),
-                _ => (),
+            if let Err(error) = sdl_manager.game_controller_subsystem.add_mapping(mapping) {
+                panic!("failed to load mapping: {}", error)
             }
         }
         #[cfg(feature = "flamegraph-profiling")]
@@ -133,7 +132,7 @@ impl SDLManager {
         // Look into controllers that were already connected at start-up
         sdl_manager.add_available_controllers();
 
-        return sdl_manager;
+        Ok(sdl_manager)
     }
 
     fn add_available_controllers(&mut self) {
@@ -170,15 +169,12 @@ impl SDLManager {
         let haptic = self.haptic_subsystem.open_from_joystick_id(index).ok();
         let controller_id = controller.instance_id();
 
-        match haptic {
-            None => {
-                println!(
-                    "Note: “{}” (#{}) doesn't support haptic feedback.",
-                    controller.name(),
-                    controller_id
-                );
-            }
-            _ => (),
+        if haptic.is_none() {
+            println!(
+                "Note: “{}” (#{}) doesn't support haptic feedback.",
+                controller.name(),
+                controller_id
+            );
         }
 
         let controller_manager = ControllerManager { controller, haptic };
@@ -206,22 +202,22 @@ impl SDLManager {
             controller_id
         );
 
-        return result;
+        result
     }
 
     pub fn has_controller(&self, index: u32) -> Result<bool, sdl2::IntegerOrSdlError> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#has_controller()");
         let controller = self.game_controller_subsystem.open(index)?;
-        return Ok(self
+        Ok(self
             .active_controllers
-            .contains_key(&controller.instance_id()));
+            .contains_key(&controller.instance_id()))
     }
 
     pub fn remove_controller(&mut self, id: i32) -> Option<ControllerManager> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#remove_controller()");
-        return match self.active_controllers.remove(&id) {
+        match self.active_controllers.remove(&id) {
             Some(controller_manager) => {
                 println!(
                     "Removed “{}” (#{})",
@@ -229,9 +225,9 @@ impl SDLManager {
                     id
                 );
 
-                return Some(controller_manager);
+                Some(controller_manager)
             }
             None => None,
-        };
+        }
     }
 }
