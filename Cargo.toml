@@ -14,7 +14,6 @@ flamegraph-profiling = ["flame"]
 
 [dependencies]
 bitflags = "1.0.4"
-clap = "2.32.0"
 flame = { version = "0.2.2", optional = true }
 game_time = "0.2.0"
 hex-view = "0.1.2"
@@ -22,6 +21,7 @@ num = "0.2.0"
 sdl2 = "0.32.1"
 serialport = "3.2.0"
 spin_sleep = "0.3.7"
+structopt = "0.2.14"
 
 [dev-dependencies]
 mockstream = "0.0.3"

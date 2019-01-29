@@ -20,8 +20,6 @@
 
 #[macro_use]
 extern crate bitflags;
-#[macro_use]
-extern crate clap;
 extern crate game_time;
 extern crate hex_view;
 use hex_view::HexView;
@@ -33,6 +31,9 @@ use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
+use std::str::FromStr;
+extern crate structopt;
+use structopt::StructOpt;
 
 #[cfg(feature = "flamegraph-profiling")]
 extern crate flame;
@@ -57,11 +58,13 @@ const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
 // Serial port name hint is different per-OS
 #[cfg(target_os = "macos")]
-const SERIAL_HINT: &str = "\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
+const SERIAL_HINT: &str =
+    "Device to use to communcate.\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
 #[cfg(all(unix, not(target_os = "macos")))]
-const SERIAL_HINT: &str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
+const SERIAL_HINT: &str =
+    "Device to use to communcate.\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
 #[cfg(windows)]
-const SERIAL_HINT: &str = "\n(Usually COM3 for USB Serial on Windows.)";
+const SERIAL_HINT: &str = "Device to use to communcate.\n(Usually COM3 for USB Serial on Windows.)";
 
 // How many times you need to multiply a u8 converted
 // to u16 by to become a u16 of the same magnitude
@@ -99,58 +102,85 @@ bitflags! {
     }
 }
 
+#[derive(StructOpt, Debug)]
+#[structopt()]
+struct CLIArgs {
+    /// Print more information about activity
+    #[structopt(short, long)]
+    verbose: bool,
+    #[structopt(subcommand)]
+    subcommand: Subcommands,
+}
+
+#[derive(StructOpt, Debug)]
+enum Subcommands {
+    /// Start a transliteration session using a PS2 Controller Emulator over Serial
+    #[structopt(name = "ps2ce")]
+    PS2CESubcommand(PS2CESubcommand),
+    /// Tests the game controller subsystem
+    #[structopt(name = "test")]
+    Test,
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(rename_all = "kebab-case")]
+struct PS2CESubcommand {
+    // Serial port name hint is different per-OS
+    #[structopt(raw(help = "SERIAL_HINT"))]
+    device: String,
+
+    /// How to map the analog triggers
+    #[structopt(
+        raw(
+            possible_values = "&TriggerMode::variants()",
+            case_insensitive = "true"
+        ),
+        long,
+        short,
+        default_value = "normal"
+    )]
+    trigger_mode: TriggerMode,
+    /// Disable stick normalisation.
+    ///
+    /// Normally, stick values are multiplied by 1.1, to simulate the prominent
+    /// outer deadzone exhibited by real DualShock 2 controllers. This option
+    /// removes this compensation. May be useful if you're using another
+    /// older-style analog controller.
+    #[structopt(long, short)]
+    no_stick_normalise: bool,
+}
+
+#[derive(Debug)]
+enum TriggerMode {
+    Normal,
+    RightStick,
+    CrossAndSquare,
+}
+
+impl TriggerMode {
+    fn variants() -> [&'static str; 3] {
+        ["normal", "right-stick", "cross-and-square"]
+    }
+}
+
+impl FromStr for TriggerMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "normal" => Ok(TriggerMode::Normal),
+            "right-stick" => Ok(TriggerMode::RightStick),
+            "cross-and-square" => Ok(TriggerMode::CrossAndSquare),
+            _ => Err("Unexpected trigger mode type".to_string()),
+        }
+    }
+}
+
 fn main() -> Result<(), Box<std::error::Error>> {
-    use clap::{AppSettings, Arg, SubCommand};
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("Parse Arguments");
 
-    let arguments = app_from_crate!()
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg(
-            Arg::with_name("verbose")
-                .long("verbose")
-                .short("v")
-                .help("Print more information about activity"),
-        )
-        .subcommand(
-            SubCommand::with_name("ps2ce")
-                .about(
-                    "Start a transliteration session using a PS2 Controller Emulator over Serial",
-                )
-                .arg(
-                    Arg::with_name("device")
-                        .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
-                        .index(1)
-                        .takes_value(true)
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("trigger-mode")
-                        .long("trigger-mode")
-                        .short("t")
-                        .help("How to map the analog triggers")
-                        .takes_value(true)
-                        .default_value("normal")
-                        .possible_value("normal")
-                        .possible_value("right-stick")
-                        .possible_value("cross-and-square"),
-                )
-                .arg(
-                    Arg::with_name("no-stick-normalise")
-                        .long("no-stick-normalise")
-                        .short("n")
-                        .help("Disable stick normalisation")
-                        .long_help(
-                            "Disable stick normalisation. Normally, stick values \
-                             are multiplied by 1.1, to simulate the prominent outer \
-                             deadzone exhibited by real DualShock 2 controllers. \
-                             This option removes this compensation. May be useful \
-                             if you're using another older-style analog controller.",
-                        ),
-                ),
-        )
-        .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
-        .get_matches();
+    let arguments = CLIArgs::from_args();
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("Parse Arguments");
@@ -162,14 +192,13 @@ fn main() -> Result<(), Box<std::error::Error>> {
         sdl_manager.active_controllers.len()
     );
 
-    match arguments.subcommand_name() {
-        Some("ps2ce") => {
+    match arguments.subcommand {
+        Subcommands::PS2CESubcommand(_) => {
             send_to_ps2_controller_emulator(&arguments, &mut sdl_manager)?;
         }
-        Some("test") => {
+        Subcommands::Test => {
             print_events(&arguments, &mut sdl_manager)?;
         }
-        _ => (),
     }
 
     #[cfg(feature = "flamegraph-profiling")]
@@ -261,7 +290,7 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
 
 fn controller_map_seven_byte<T: GameController>(
     controller: &T,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     #[cfg(feature = "flamegraph-profiling")]
@@ -275,7 +304,7 @@ fn controller_map_seven_byte<T: GameController>(
 
 fn controller_map_twenty_byte<T: GameController>(
     controller: &T,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     #[cfg(feature = "flamegraph-profiling")]
@@ -322,7 +351,7 @@ fn controller_map_twenty_byte<T: GameController>(
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("handle trigger_mode");
     match trigger_mode {
-        "right-stick" => {
+        TriggerMode::RightStick => {
             l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
             r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
@@ -334,7 +363,7 @@ fn controller_map_twenty_byte<T: GameController>(
             right_stick_y_value =
                 controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
-        "cross-and-square" => {
+        TriggerMode::CrossAndSquare => {
             l2_button_value = convert_button_to_analog(controller.button(Button::A));
             r2_button_value = convert_button_to_analog(controller.button(Button::X));
 
@@ -434,7 +463,7 @@ fn clear_serial_buffer<T: Read>(serial: &mut T) {
 }
 
 fn send_to_ps2_controller_emulator(
-    arguments: &clap::ArgMatches,
+    arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
 ) -> Result<(), Box<std::error::Error>> {
     use serialport::prelude::*;
@@ -443,9 +472,12 @@ fn send_to_ps2_controller_emulator(
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator()");
 
-    let verbose = arguments.is_present("verbose");
-    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
-    let device_path = command_arguments.value_of("device").unwrap();
+    let verbose = arguments.verbose;
+    let command_arguments = match arguments.subcommand {
+        Subcommands::PS2CESubcommand(ref subcommand) => subcommand,
+        _ => panic!("We got put into a subcommand we weren't expecting. Weird!"),
+    };
+    let device_path = &command_arguments.device;
 
     if verbose {
         println!(
@@ -466,7 +498,7 @@ fn send_to_ps2_controller_emulator(
         timeout: Duration::from_millis(8),
     };
 
-    let serial = match serialport::open_with_settings(device_path, &serial_settings) {
+    let serial = match serialport::open_with_settings(&device_path, &serial_settings) {
         Ok(serial) => serial,
         Err(error) => panic!("failed to open serial device: {}", error),
     };
@@ -475,14 +507,17 @@ fn send_to_ps2_controller_emulator(
 }
 
 fn send_to_ps2_controller_emulator_via<I: Read + Write>(
-    arguments: &clap::ArgMatches,
+    arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
     mut serial: I,
 ) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator_via()");
-    let verbose = arguments.is_present("verbose");
-    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
+    let verbose = arguments.verbose;
+    let command_arguments = match arguments.subcommand {
+        Subcommands::PS2CESubcommand(ref subcommand) => subcommand,
+        _ => panic!("We got put into a subcommand we weren't expecting. Weird!"),
+    };
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
@@ -566,13 +601,13 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     clear_serial_buffer(&mut serial);
 
-    let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
+    let trigger_mode = &command_arguments.trigger_mode;
 
     if verbose {
-        println!("Using trigger mode '{}'...", trigger_mode);
+        println!("Using trigger mode '{:?}'...", trigger_mode);
     }
 
-    let normalise_sticks = !command_arguments.is_present("no-stick-normalise");
+    let normalise_sticks = !command_arguments.no_stick_normalise;
 
     if verbose {
         if normalise_sticks {
@@ -728,7 +763,7 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     serial: &mut I,
     controller: &T,
     communication_mode: &ControllerEmulatorPacketType,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
     verbose: bool,
 ) -> Result<Vec<u8>, Box<std::error::Error>> {
@@ -818,7 +853,7 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
 }
 
 fn print_events(
-    _arguments: &clap::ArgMatches,
+    _arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
 ) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
@@ -1050,7 +1085,7 @@ mod tests {
     #[test]
     fn controller_map_twenty_byte_works() {
         use super::controller_map_twenty_byte;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1058,7 +1093,7 @@ mod tests {
             FauxController::create_with_name(String::from("Applejack Game-player Pad"));
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "normal", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1087,7 +1122,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "right-stick", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1116,7 +1151,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1154,7 +1189,7 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "normal", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1183,7 +1218,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "right-stick", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1212,7 +1247,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1244,7 +1279,7 @@ mod tests {
     #[test]
     fn controller_map_seven_byte_works() {
         use super::controller_map_seven_byte;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1252,7 +1287,7 @@ mod tests {
             FauxController::create_with_name(String::from("Apple Pippin Controller"));
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "normal", true),
+            controller_map_seven_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1266,7 +1301,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "right-stick", true),
+            controller_map_seven_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1280,7 +1315,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "cross-and-square", true),
+            controller_map_seven_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1303,7 +1338,7 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "normal", true),
+            controller_map_seven_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1317,7 +1352,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "right-stick", true),
+            controller_map_seven_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1331,7 +1366,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "cross-and-square", true),
+            controller_map_seven_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1350,7 +1385,7 @@ mod tests {
         use self::mockstream::SharedMockStream;
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use DUALSHOCK_MAGIC;
         use SEVEN_BYTE_OK_RESPONSE;
         use TWENTY_BYTE_OK_HEADER;
@@ -1367,7 +1402,7 @@ mod tests {
                 &mut serial,
                 &controller,
                 &ControllerEmulatorPacketType::SevenByte,
-                "normal",
+                &TriggerMode::Normal,
                 false,
                 false,
             )?,
@@ -1396,7 +1431,7 @@ mod tests {
                 &mut serial,
                 &controller,
                 &ControllerEmulatorPacketType::TwentyByte,
-                "normal",
+                &TriggerMode::Normal,
                 false,
                 false,
             )?,
