@@ -1,6 +1,6 @@
 [package]
 name = "omnishock"
-version = "0.0.6"
+version = "0.0.9"
 description = "Something to do with game controllers!"
 authors = [ "Jessica Stokes <hello@jessicastokes.net>" ]
 repository = "https://github.com/ticky/omnishock.git"
@@ -14,14 +14,14 @@ flamegraph-profiling = ["flame"]
 
 [dependencies]
 bitflags = "1.0.4"
-clap = "2.30.0"
-flame = { version = "0.2.0", optional = true }
+flame = { version = "0.2.2", optional = true }
 game_time = "0.2.0"
 hex-view = "0.1.2"
-num = "0.1.42"
-sdl2 = "0.31.0"
+num = "0.2.0"
+sdl2 = "0.32.1"
 serialport = "3.2.0"
-spin_sleep = "0.3.4"
+spin_sleep = "0.3.7"
+structopt = "0.2.14"
 
 [dev-dependencies]
 mockstream = "0.0.3"

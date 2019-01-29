@@ -1,5 +1,5 @@
-# Based on the "trust" template v0.1.1
-# https://github.com/japaric/trust/tree/v0.1.1
+# Based on the "trust" template v0.1.2
+# https://github.com/japaric/trust/tree/v0.1.2
 
 dist: trusty
 language: rust
@@ -16,6 +16,8 @@ env:
     - LD_LIBRARY_PATH: /usr/local/lib
 
 matrix:
+  allow_failures:
+    - rust: beta
   include:
     # macOS
     - env: TARGET=x86_64-apple-darwin
@@ -60,6 +62,7 @@ install:
   - source ~/.cargo/env || true
 
 before_script:
+  - rustup component add clippy
   - rustup component add rustfmt
 
 script:
@@ -80,6 +83,8 @@ deploy:
     tags: true
   provider: releases
   skip_cleanup: true
+
+after_deploy: set +e
 
 cache: cargo
 before_cache:

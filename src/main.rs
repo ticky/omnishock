@@ -20,8 +20,6 @@
 
 #[macro_use]
 extern crate bitflags;
-#[macro_use]
-extern crate clap;
 extern crate game_time;
 extern crate hex_view;
 use hex_view::HexView;
@@ -33,6 +31,9 @@ use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
+use std::str::FromStr;
+extern crate structopt;
+use structopt::StructOpt;
 
 #[cfg(feature = "flamegraph-profiling")]
 extern crate flame;
@@ -57,11 +58,17 @@ const TWENTY_BYTE_OK_HEADER: u8 = DUALSHOCK_MAGIC;
 
 // Serial port name hint is different per-OS
 #[cfg(target_os = "macos")]
-const SERIAL_HINT: &'static str = "\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
+const SERIAL_HINT: &str =
+    "Device to use to communcate.\n(Usually /dev/cu.usbmodem12341 for USB Serial on macOS.)";
 #[cfg(all(unix, not(target_os = "macos")))]
-const SERIAL_HINT: &'static str = "\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
+const SERIAL_HINT: &str =
+    "Device to use to communcate.\n(Usually /dev/ttyUSB0 for USB Serial on Unix.)";
 #[cfg(windows)]
-const SERIAL_HINT: &'static str = "\n(Usually COM3 for USB Serial on Windows.)";
+const SERIAL_HINT: &str = "Device to use to communcate.\n(Usually COM3 for USB Serial on Windows.)";
+
+// How many times you need to multiply a u8 converted
+// to u16 by to become a u16 of the same magnitude
+const U8_TO_U16_MAGNITUDE: u16 = u16::max_value() / u8::max_value() as u16;
 
 enum ControllerEmulatorPacketType {
     None,       // Fallback, just log messages
@@ -71,122 +78,151 @@ enum ControllerEmulatorPacketType {
 
 bitflags! {
     struct Buttons1: u8 {
-        const Left = 0b10000000;
-        const Down = 0b01000000;
-        const Right = 0b00100000;
-        const Up = 0b00010000;
-        const Start = 0b00001000;
-        const R3 = 0b00000100;
-        const L3 = 0b00000010;
-        const Select = 0b00000001;
+        const Left = 0b1000_0000;
+        const Down = 0b0100_0000;
+        const Right = 0b0010_0000;
+        const Up = 0b0001_0000;
+        const Start = 0b0000_1000;
+        const R3 = 0b0000_0100;
+        const L3 = 0b0000_0010;
+        const Select = 0b0000_0001;
     }
 }
 
 bitflags! {
     struct Buttons2: u8 {
-        const Square = 0b10000000;
-        const Cross = 0b01000000;
-        const Circle = 0b00100000;
-        const Triangle = 0b00010000;
-        const R1 = 0b00001000;
-        const L1 = 0b00000100;
-        const R2 = 0b00000010;
-        const L2 = 0b00000001;
+        const Square = 0b1000_0000;
+        const Cross = 0b0100_0000;
+        const Circle = 0b0010_0000;
+        const Triangle = 0b0001_0000;
+        const R1 = 0b0000_1000;
+        const L1 = 0b0000_0100;
+        const R2 = 0b0000_0010;
+        const L2 = 0b0000_0001;
     }
 }
 
-fn main() {
-    use clap::{AppSettings, Arg, SubCommand};
+#[derive(StructOpt, Debug)]
+#[structopt()]
+struct CLIArgs {
+    /// Print more information about activity
+    #[structopt(short, long)]
+    verbose: bool,
+    #[structopt(subcommand)]
+    subcommand: Subcommands,
+}
+
+#[derive(StructOpt, Debug)]
+enum Subcommands {
+    /// Start a transliteration session using a PS2 Controller Emulator over Serial
+    #[structopt(name = "ps2ce")]
+    PS2CESubcommand(PS2CESubcommand),
+    /// Tests the game controller subsystem
+    #[structopt(name = "test")]
+    Test,
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(rename_all = "kebab-case")]
+struct PS2CESubcommand {
+    // Serial port name hint is different per-OS
+    #[structopt(raw(help = "SERIAL_HINT"))]
+    device: String,
+
+    /// How to map the analog triggers
+    #[structopt(
+        raw(
+            possible_values = "&TriggerMode::variants()",
+            case_insensitive = "true"
+        ),
+        long,
+        short,
+        default_value = "normal"
+    )]
+    trigger_mode: TriggerMode,
+    /// Disable stick normalisation.
+    ///
+    /// Normally, stick values are multiplied by 1.1, to simulate the prominent
+    /// outer deadzone exhibited by real DualShock 2 controllers. This option
+    /// removes this compensation. May be useful if you're using another
+    /// older-style analog controller.
+    #[structopt(long, short)]
+    no_stick_normalise: bool,
+}
+
+#[derive(Debug)]
+enum TriggerMode {
+    Normal,
+    RightStick,
+    CrossAndSquare,
+}
+
+impl TriggerMode {
+    fn variants() -> [&'static str; 3] {
+        ["normal", "right-stick", "cross-and-square"]
+    }
+}
+
+impl FromStr for TriggerMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "normal" => Ok(TriggerMode::Normal),
+            "right-stick" => Ok(TriggerMode::RightStick),
+            "cross-and-square" => Ok(TriggerMode::CrossAndSquare),
+            _ => Err("Unexpected trigger mode type".to_string()),
+        }
+    }
+}
+
+fn main() -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("Parse Arguments");
 
-    let arguments = app_from_crate!()
-        .setting(AppSettings::SubcommandRequiredElseHelp)
-        .arg(
-            Arg::with_name("verbose")
-                .long("verbose")
-                .short("v")
-                .help("Print more information about activity"),
-        )
-        .subcommand(
-            SubCommand::with_name("ps2ce")
-                .about(
-                    "Start a transliteration session using a PS2 Controller Emulator over Serial",
-                )
-                .arg(
-                    Arg::with_name("device")
-                        .help(&format!("Device to use to communcate.{}", SERIAL_HINT))
-                        .index(1)
-                        .takes_value(true)
-                        .required(true),
-                )
-                .arg(
-                    Arg::with_name("trigger-mode")
-                        .long("trigger-mode")
-                        .short("t")
-                        .help("How to map the analog triggers")
-                        .takes_value(true)
-                        .default_value("normal")
-                        .possible_value("normal")
-                        .possible_value("right-stick")
-                        .possible_value("cross-and-square"),
-                )
-                .arg(
-                    Arg::with_name("no-stick-normalise")
-                        .long("no-stick-normalise")
-                        .short("n")
-                        .help("Disable stick normalisation")
-                        .long_help(
-                            "Disable stick normalisation. Normally, stick values \
-                             are multiplied by 1.1, to simulate the prominent outer \
-                             deadzone exhibited by real DualShock 2 controllers. \
-                             This option removes this compensation. May be useful \
-                             if you're using another older-style analog controller.",
-                        ),
-                ),
-        )
-        .subcommand(SubCommand::with_name("test").about("Tests the game controller subsystem"))
-        .get_matches();
+    let arguments = CLIArgs::from_args();
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("Parse Arguments");
 
-    let mut sdl_manager = SDLManager::init();
+    let mut sdl_manager = SDLManager::init()?;
 
     println!(
         "(There are {} controllers connected)",
         sdl_manager.active_controllers.len()
     );
 
-    match arguments.subcommand_name() {
-        Some("ps2ce") => {
-            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager).unwrap();
+    match arguments.subcommand {
+        Subcommands::PS2CESubcommand(_) => {
+            send_to_ps2_controller_emulator(&arguments, &mut sdl_manager)?;
         }
-        Some("test") => {
-            print_events(&arguments, &mut sdl_manager);
+        Subcommands::Test => {
+            print_events(&arguments, &mut sdl_manager)?;
         }
-        _ => (),
     }
 
     #[cfg(feature = "flamegraph-profiling")]
-    flame::dump_html(&mut File::create("flame-graph.html").unwrap()).unwrap();
+    flame::dump_html(&mut File::create("flame-graph.html")?)?;
     #[cfg(feature = "flamegraph-profiling")]
-    flame::dump_json(&mut File::create("flame-graph.json").unwrap()).unwrap();
+    flame::dump_json(&mut File::create("flame-graph.json")?)?;
+
+    Ok(())
 }
 
 fn whats_the_midpoint_of_a<T: num::Bounded + Add<Output = T> + Div<Output = T> + From<u8>>() -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("whats_the_midpoint_of_a()");
-    return (T::max_value() + T::min_value()) / T::from(2);
+    (T::max_value() + T::min_value()) / T::from(2)
 }
 
 fn convert_button_to_analog<T: num::Bounded>(button: bool) -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_button_to_analog()");
-    return match button {
-        true => T::max_value(),
-        false => T::min_value(),
-    };
+    if button {
+        T::max_value()
+    } else {
+        T::min_value()
+    }
 }
 
 fn convert_analog_to_button<
@@ -203,7 +239,7 @@ fn convert_analog_to_button<
 fn convert_for_dualshock(number: i16) -> u8 {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_for_dualshock()");
-    return (number.wrapping_shr(8) + 0x80) as u8;
+    (number.wrapping_shr(8) + 0x80) as u8
 }
 
 fn convert_half_axis_positive<
@@ -223,7 +259,7 @@ fn convert_half_axis_positive<
     let normalised_stick = stick.saturating_add(half_minimum);
 
     // This is a weird way to multiply by two but it works eh
-    return normalised_stick.saturating_add(normalised_stick);
+    normalised_stick.saturating_add(normalised_stick)
 }
 
 fn convert_half_axis_negative<
@@ -239,7 +275,7 @@ fn convert_half_axis_negative<
 ) -> T {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("convert_half_axis_negative()");
-    return convert_half_axis_positive(stick.saturating_add(T::from(1)).neg());
+    convert_half_axis_positive(stick.saturating_add(T::from(1)).neg())
 }
 
 fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
@@ -254,7 +290,7 @@ fn normalise_stick_as_dualshock2(x: &mut i16, y: &mut i16) {
 
 fn controller_map_seven_byte<T: GameController>(
     controller: &T,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     #[cfg(feature = "flamegraph-profiling")]
@@ -263,12 +299,12 @@ fn controller_map_seven_byte<T: GameController>(
     // the first seven bytes of the twenty-byte map!
     let mut map = controller_map_twenty_byte(controller, trigger_mode, normalise_sticks);
     map.truncate(7);
-    return map;
+    map
 }
 
 fn controller_map_twenty_byte<T: GameController>(
     controller: &T,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
 ) -> Vec<u8> {
     #[cfg(feature = "flamegraph-profiling")]
@@ -315,7 +351,7 @@ fn controller_map_twenty_byte<T: GameController>(
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("handle trigger_mode");
     match trigger_mode {
-        "right-stick" => {
+        TriggerMode::RightStick => {
             l2_button_value = convert_half_axis_negative(controller.axis(Axis::RightY));
             r2_button_value = convert_half_axis_positive(controller.axis(Axis::RightY));
 
@@ -327,7 +363,7 @@ fn controller_map_twenty_byte<T: GameController>(
             right_stick_y_value =
                 controller.axis(Axis::TriggerLeft) - controller.axis(Axis::TriggerRight);
         }
-        "cross-and-square" => {
+        TriggerMode::CrossAndSquare => {
             l2_button_value = convert_button_to_analog(controller.button(Button::A));
             r2_button_value = convert_button_to_analog(controller.button(Button::X));
 
@@ -364,9 +400,10 @@ fn controller_map_twenty_byte<T: GameController>(
     buttons2.set(Buttons2::R2, convert_analog_to_button(r2_button_value));
     buttons2.set(Buttons2::L2, convert_analog_to_button(l2_button_value));
 
-    let mode_footer = match controller.button(Button::Guide) {
-        true => 0xAA,
-        false => 0x55,
+    let mode_footer = if controller.button(Button::Guide) {
+        0xAA
+    } else {
+        0x55
     };
 
     return vec![
@@ -426,18 +463,21 @@ fn clear_serial_buffer<T: Read>(serial: &mut T) {
 }
 
 fn send_to_ps2_controller_emulator(
-    arguments: &clap::ArgMatches,
+    arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
-) -> std::io::Result<()> {
+) -> Result<(), Box<std::error::Error>> {
     use serialport::prelude::*;
     use std::time::Duration;
 
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator()");
 
-    let verbose = arguments.is_present("verbose");
-    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
-    let device_path = command_arguments.value_of("device").unwrap();
+    let verbose = arguments.verbose;
+    let command_arguments = match arguments.subcommand {
+        Subcommands::PS2CESubcommand(ref subcommand) => subcommand,
+        _ => panic!("We got put into a subcommand we weren't expecting. Weird!"),
+    };
+    let device_path = &command_arguments.device;
 
     if verbose {
         println!(
@@ -458,7 +498,7 @@ fn send_to_ps2_controller_emulator(
         timeout: Duration::from_millis(8),
     };
 
-    let serial = match serialport::open_with_settings(device_path, &serial_settings) {
+    let serial = match serialport::open_with_settings(&device_path, &serial_settings) {
         Ok(serial) => serial,
         Err(error) => panic!("failed to open serial device: {}", error),
     };
@@ -467,14 +507,17 @@ fn send_to_ps2_controller_emulator(
 }
 
 fn send_to_ps2_controller_emulator_via<I: Read + Write>(
-    arguments: &clap::ArgMatches,
+    arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
     mut serial: I,
-) -> std::io::Result<()> {
+) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator_via()");
-    let verbose = arguments.is_present("verbose");
-    let command_arguments = arguments.subcommand_matches("ps2ce").unwrap();
+    let verbose = arguments.verbose;
+    let command_arguments = match arguments.subcommand {
+        Subcommands::PS2CESubcommand(ref subcommand) => subcommand,
+        _ => panic!("We got put into a subcommand we weren't expecting. Weird!"),
+    };
 
     let mut communication_mode = ControllerEmulatorPacketType::None;
 
@@ -495,7 +538,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     }
 
     // Send a twenty-byte, packet of a neutral controller state.
-    serial.write(&vec![
+    serial.write_all(&[
         DUALSHOCK_MAGIC,
         !Buttons1::empty().bits(),
         !Buttons2::empty().bits(),
@@ -558,22 +601,23 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
     clear_serial_buffer(&mut serial);
 
-    let trigger_mode = command_arguments.value_of("trigger-mode").unwrap();
+    let trigger_mode = &command_arguments.trigger_mode;
 
     if verbose {
-        println!("Using trigger mode '{}'...", trigger_mode);
+        println!("Using trigger mode '{:?}'...", trigger_mode);
     }
 
-    let normalise_sticks = command_arguments.is_present("no-stick-normalise") == false;
+    let normalise_sticks = !command_arguments.no_stick_normalise;
 
     if verbose {
-        match normalise_sticks {
-            true => println!("Normalising stick extents (stick values * 1.1)"),
-            false => println!("Not normalising stick extents"),
+        if normalise_sticks {
+            println!("Normalising stick extents (stick values * 1.1)")
+        } else {
+            println!("Not normalising stick extents")
         }
     }
 
-    let mut event_pump = sdl_manager.context.event_pump().unwrap();
+    let mut event_pump = sdl_manager.context.event_pump()?;
 
     // We use `game_time` to keep track of "frame" time and try to hit a
     // consistent rate at all times. We use `spin_sleep` instead of
@@ -653,14 +697,11 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 Event::ControllerDeviceRemoved { which, .. } => {
                     #[cfg(feature = "flamegraph-profiling")]
                     let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
-                    match sdl_manager.remove_controller(which) {
-                        Some(_) => {
-                            println!(
-                                "(There are {} controllers connected)",
-                                sdl_manager.active_controllers.len()
-                            );
-                        }
-                        None => (),
+                    if sdl_manager.remove_controller(which).is_some() {
+                        println!(
+                            "(There are {} controllers connected)",
+                            sdl_manager.active_controllers.len()
+                        );
                     };
                 }
 
@@ -671,51 +712,39 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
 
         // Now that we've kept track of controller additions & removals,
         // post an update for the one controller we currently care about.
-        match sdl_manager.active_controllers.get_mut(&0) {
-            Some(controller) => {
-                let response = send_event_to_controller(
-                    &mut serial,
-                    controller,
-                    &communication_mode,
-                    trigger_mode,
-                    normalise_sticks,
-                    verbose,
-                )?;
+        if let Some(controller) = sdl_manager.active_controllers.get_mut(&0) {
+            let response = send_event_to_controller(
+                &mut serial,
+                controller,
+                &communication_mode,
+                trigger_mode,
+                normalise_sticks,
+                verbose,
+            )?;
 
-                // If we've receieved a response from the controller, and our
-                // controller supports haptic feedback, update its haptic state
-                if !response.is_empty() {
-                    let controller_name = controller.name();
+            // If we've receieved a response from the controller,
+            // try updating its haptic state
+            if !response.is_empty() {
+                let small_motor_intensity = u16::from(response[1]) * U8_TO_U16_MAGNITUDE;
+                let large_motor_intensity = u16::from(response[2]) * U8_TO_U16_MAGNITUDE;
 
-                    match controller.haptic {
-                        Some(ref mut haptic) => {
-                            let small_motor_intensity = response[1];
-                            let large_motor_intensity = response[2];
+                if verbose {
+                    println!(
+                        "“{}”: Setting rumble to ({},{})",
+                        controller.name(),
+                        small_motor_intensity,
+                        large_motor_intensity
+                    );
+                }
 
-                            // We calculate the rumble intensity as 1/3 of the small
-                            // motor, plus the full intensity of the large motor
-                            let rumble_intensity = small_motor_intensity as f32 / 255.0 / 3.0
-                                + large_motor_intensity as f32 / 255.0;
-
-                            if verbose {
-                                println!(
-                                    "Setting haptic feedback to {} for {}",
-                                    rumble_intensity, controller_name
-                                );
-                            }
-
-                            // NOTE: Should probably be an <https://wiki.libsdl.org/SDL_HapticLeftRight>,
-                            //       but the `sdl2` crate doesn't yet support it.
-                            haptic.rumble_stop();
-                            if rumble_intensity > 0.0 {
-                                haptic.rumble_play(rumble_intensity, 500);
-                            }
-                        }
-                        _ => (),
-                    }
+                // We don't care if `set_rumble` actually worked,
+                // because if it's unsupported, it won't break anything,
+                // so we just ignore the result entirely here.
+                #[allow(unused_must_use)]
+                {
+                    controller.set_rumble(small_motor_intensity, large_motor_intensity, 500);
                 }
             }
-            _ => (),
         }
 
         {
@@ -734,10 +763,10 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     serial: &mut I,
     controller: &T,
     communication_mode: &ControllerEmulatorPacketType,
-    trigger_mode: &str,
+    trigger_mode: &TriggerMode,
     normalise_sticks: bool,
     verbose: bool,
-) -> std::io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_event_to_controller()");
     let sent;
@@ -823,12 +852,15 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     Ok(received)
 }
 
-fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
+fn print_events(
+    _arguments: &CLIArgs,
+    sdl_manager: &mut SDLManager,
+) -> Result<(), Box<std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("print_events()");
     println!("Printing all controller events...");
 
-    for event in sdl_manager.context.event_pump().unwrap().wait_iter() {
+    for event in sdl_manager.context.event_pump()?.wait_iter() {
         use sdl2::event::Event;
 
         match event {
@@ -854,14 +886,11 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             Event::ControllerDeviceRemoved { which, .. } => {
                 #[cfg(feature = "flamegraph-profiling")]
                 let _guard = flame::start_guard("Event::ControllerDeviceRemoved");
-                match sdl_manager.remove_controller(which) {
-                    Some(_) => {
-                        println!(
-                            "(There are {} controllers connected)",
-                            sdl_manager.active_controllers.len()
-                        );
-                    }
-                    None => (),
+                if sdl_manager.remove_controller(which).is_some() {
+                    println!(
+                        "(There are {} controllers connected)",
+                        sdl_manager.active_controllers.len()
+                    );
                 };
             }
 
@@ -878,22 +907,19 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
                     value
                 );
 
-                match sdl_manager.active_controllers.get_mut(&which) {
-                    Some(controller) => {
-                        let controller_name = controller.name();
+                if let Some(controller) = sdl_manager.active_controllers.get_mut(&which) {
+                    #[cfg(feature = "flamegraph-profiling")]
+                    let _guard = flame::start_guard("set rumble");
 
-                        match controller.haptic {
-                            Some(ref mut haptic) => {
-                                #[cfg(feature = "flamegraph-profiling")]
-                                let _guard = flame::start_guard("set rumble");
-                                println!("Running haptic feedback for “{}”", controller_name);
-                                haptic.rumble_stop();
-                                haptic.rumble_play(1.0, 500);
-                            }
-                            _ => (),
-                        }
+                    println!("“{}”: Rumbling", controller.name());
+
+                    // We don't care if `set_rumble` actually worked,
+                    // because if it's unsupported, it won't break anything,
+                    // so we just ignore the result entirely here.
+                    #[allow(unused_must_use)]
+                    {
+                        controller.set_rumble(0xFFFF, 0xFFFF, 500);
                     }
-                    _ => (),
                 };
             }
 
@@ -923,6 +949,8 @@ fn print_events(_arguments: &clap::ArgMatches, sdl_manager: &mut SDLManager) {
             _ => (),
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -963,6 +991,7 @@ mod tests {
 
     #[test]
     fn whats_the_midpoint_of_a_is_accurate() {
+        #![allow(clippy::float_cmp)]
         use super::whats_the_midpoint_of_a;
 
         assert_eq!(whats_the_midpoint_of_a::<u8>(), 127_u8);
@@ -972,6 +1001,8 @@ mod tests {
         );
         assert_eq!(whats_the_midpoint_of_a::<i16>(), 0_i16);
         assert_eq!(whats_the_midpoint_of_a::<i64>(), 0_i64);
+        // NOTE: This would normally trip the `clippy::float_cmp` rule,
+        //       which is why we've explicitly allowed it above.
         assert_eq!(whats_the_midpoint_of_a::<f32>(), 0_f32);
     }
 
@@ -1012,13 +1043,11 @@ mod tests {
         fn create_with_name(name: String) -> FauxController {
             let buttons = HashMap::new();
             let axes = HashMap::new();
-            let new_controller = FauxController {
+            FauxController {
                 name,
                 buttons,
                 axes,
-            };
-
-            return new_controller;
+            }
         }
 
         fn set_button(&mut self, button: sdl2::controller::Button, value: bool) {
@@ -1042,12 +1071,21 @@ mod tests {
         fn axis(&self, axis: sdl2::controller::Axis) -> i16 {
             *self.axes.get(&axis).unwrap_or(&0)
         }
+
+        fn set_rumble(
+            &mut self,
+            _low_frequency_rumble: u16,
+            _high_frequency_rumble: u16,
+            _duration_ms: u32,
+        ) -> Result<(), String> {
+            Ok(())
+        }
     }
 
     #[test]
     fn controller_map_twenty_byte_works() {
         use super::controller_map_twenty_byte;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1055,7 +1093,7 @@ mod tests {
             FauxController::create_with_name(String::from("Applejack Game-player Pad"));
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "normal", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1084,7 +1122,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "right-stick", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1113,7 +1151,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1151,7 +1189,7 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "normal", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1180,7 +1218,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "right-stick", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1209,7 +1247,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_twenty_byte(&controller, "cross-and-square", true),
+            controller_map_twenty_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1241,7 +1279,7 @@ mod tests {
     #[test]
     fn controller_map_seven_byte_works() {
         use super::controller_map_seven_byte;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use sdl2::controller::{Axis, Button};
         use DUALSHOCK_MAGIC;
 
@@ -1249,7 +1287,7 @@ mod tests {
             FauxController::create_with_name(String::from("Apple Pippin Controller"));
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "normal", true),
+            controller_map_seven_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1263,7 +1301,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "right-stick", true),
+            controller_map_seven_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1277,7 +1315,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "cross-and-square", true),
+            controller_map_seven_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::empty().bits(),
@@ -1300,7 +1338,7 @@ mod tests {
         controller.set_axis(Axis::LeftY, -4_096);
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "normal", true),
+            controller_map_seven_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1314,7 +1352,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "right-stick", true),
+            controller_map_seven_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1328,7 +1366,7 @@ mod tests {
         );
 
         assert_eq!(
-            controller_map_seven_byte(&controller, "cross-and-square", true),
+            controller_map_seven_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
                 !Buttons1::Left.bits(),
@@ -1343,11 +1381,11 @@ mod tests {
     }
 
     #[test]
-    fn send_event_to_controller_works() {
+    fn send_event_to_controller_works() -> Result<(), Box<std::error::Error>> {
         use self::mockstream::SharedMockStream;
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
-        use super::{Buttons1, Buttons2};
+        use super::{Buttons1, Buttons2, TriggerMode};
         use DUALSHOCK_MAGIC;
         use SEVEN_BYTE_OK_RESPONSE;
         use TWENTY_BYTE_OK_HEADER;
@@ -1364,11 +1402,10 @@ mod tests {
                 &mut serial,
                 &controller,
                 &ControllerEmulatorPacketType::SevenByte,
-                "normal",
+                &TriggerMode::Normal,
                 false,
                 false,
-            )
-            .unwrap(),
+            )?,
             seven_byte_console_response
         );
         assert_eq!(
@@ -1394,11 +1431,10 @@ mod tests {
                 &mut serial,
                 &controller,
                 &ControllerEmulatorPacketType::TwentyByte,
-                "normal",
+                &TriggerMode::Normal,
                 false,
                 false,
-            )
-            .unwrap(),
+            )?,
             twenty_byte_console_response
         );
         assert_eq!(
@@ -1429,5 +1465,7 @@ mod tests {
                 0x55,
             ]
         );
+
+        Ok(())
     }
 }

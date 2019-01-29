@@ -18,7 +18,7 @@ Support for more hardware, and more firmware variants, is planned for the future
 ## Prerequisites
 
 - [Rust](https://www.rust-lang.org/install.html)
-- SDL2 (v2.0.6 or later)
+- SDL2 (v2.0.9 or later)
 - Controller emulator hardware (see above)
 
 ### Mac-specific
