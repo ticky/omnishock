@@ -655,7 +655,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
                 counter.is_running_slow(&sim_time),
             );
         } else if counter.is_running_slow(&sim_time)
-            && sim_time.total_wall_time() > warning_threshold
+            && sim_time.elapsed_wall_time() > warning_threshold
         {
             // If we're not `--verbose`, and in a debug build, we print out
             // stats only on slow iterations
