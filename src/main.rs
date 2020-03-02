@@ -1192,8 +1192,8 @@ mod tests {
             controller_map_twenty_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Cross | Buttons2::L2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::CROSS | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1221,8 +1221,8 @@ mod tests {
             controller_map_twenty_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Cross | Buttons2::R2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::CROSS | Buttons2::R2).bits(),
                 // Analog sticks
                 0x18,
                 0xFF,
@@ -1250,8 +1250,8 @@ mod tests {
             controller_map_twenty_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Square | Buttons2::L2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::SQUARE | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1341,8 +1341,8 @@ mod tests {
             controller_map_seven_byte(&controller, &TriggerMode::Normal, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Cross | Buttons2::L2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::CROSS | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
@@ -1355,8 +1355,8 @@ mod tests {
             controller_map_seven_byte(&controller, &TriggerMode::RightStick, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Cross | Buttons2::R2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::CROSS | Buttons2::R2).bits(),
                 // Analog sticks
                 0x18,
                 0xFF,
@@ -1369,8 +1369,8 @@ mod tests {
             controller_map_seven_byte(&controller, &TriggerMode::CrossAndSquare, true),
             vec![
                 DUALSHOCK_MAGIC,
-                !Buttons1::Left.bits(),
-                !(Buttons2::Square | Buttons2::L2).bits(),
+                !Buttons1::LEFT.bits(),
+                !(Buttons2::SQUARE | Buttons2::L2).bits(),
                 // Analog sticks
                 0x18,
                 0xC6,
