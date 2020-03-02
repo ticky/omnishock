@@ -78,23 +78,23 @@ enum ControllerEmulatorPacketType {
 
 bitflags! {
     struct Buttons1: u8 {
-        const Left = 0b1000_0000;
-        const Down = 0b0100_0000;
-        const Right = 0b0010_0000;
-        const Up = 0b0001_0000;
-        const Start = 0b0000_1000;
+        const LEFT = 0b1000_0000;
+        const DOWN = 0b0100_0000;
+        const RIGHT = 0b0010_0000;
+        const UP = 0b0001_0000;
+        const START = 0b0000_1000;
         const R3 = 0b0000_0100;
         const L3 = 0b0000_0010;
-        const Select = 0b0000_0001;
+        const SELECT = 0b0000_0001;
     }
 }
 
 bitflags! {
     struct Buttons2: u8 {
-        const Square = 0b1000_0000;
-        const Cross = 0b0100_0000;
-        const Circle = 0b0010_0000;
-        const Triangle = 0b0001_0000;
+        const SQUARE = 0b1000_0000;
+        const CROSS = 0b0100_0000;
+        const CIRCLE = 0b0010_0000;
+        const TRIANGLE = 0b0001_0000;
         const R1 = 0b0000_1000;
         const L1 = 0b0000_0100;
         const R2 = 0b0000_0010;
@@ -176,7 +176,7 @@ impl FromStr for TriggerMode {
     }
 }
 
-fn main() -> Result<(), Box<std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("Parse Arguments");
 
@@ -381,20 +381,20 @@ fn controller_map_twenty_byte<T: GameController>(
     }
 
     let mut buttons1 = Buttons1::empty();
-    buttons1.set(Buttons1::Left, convert_analog_to_button(dpad_left_value));
-    buttons1.set(Buttons1::Down, convert_analog_to_button(dpad_down_value));
-    buttons1.set(Buttons1::Right, convert_analog_to_button(dpad_right_value));
-    buttons1.set(Buttons1::Up, convert_analog_to_button(dpad_up_value));
-    buttons1.set(Buttons1::Start, convert_analog_to_button(start_value));
+    buttons1.set(Buttons1::LEFT, convert_analog_to_button(dpad_left_value));
+    buttons1.set(Buttons1::DOWN, convert_analog_to_button(dpad_down_value));
+    buttons1.set(Buttons1::RIGHT, convert_analog_to_button(dpad_right_value));
+    buttons1.set(Buttons1::UP, convert_analog_to_button(dpad_up_value));
+    buttons1.set(Buttons1::START, convert_analog_to_button(start_value));
     buttons1.set(Buttons1::R3, convert_analog_to_button(right_stick_value));
     buttons1.set(Buttons1::L3, convert_analog_to_button(left_stick_value));
-    buttons1.set(Buttons1::Select, convert_analog_to_button(select_value));
+    buttons1.set(Buttons1::SELECT, convert_analog_to_button(select_value));
 
     let mut buttons2 = Buttons2::empty();
-    buttons2.set(Buttons2::Square, convert_analog_to_button(square_value));
-    buttons2.set(Buttons2::Cross, convert_analog_to_button(cross_value));
-    buttons2.set(Buttons2::Circle, convert_analog_to_button(circle_value));
-    buttons2.set(Buttons2::Triangle, convert_analog_to_button(triangle_value));
+    buttons2.set(Buttons2::SQUARE, convert_analog_to_button(square_value));
+    buttons2.set(Buttons2::CROSS, convert_analog_to_button(cross_value));
+    buttons2.set(Buttons2::CIRCLE, convert_analog_to_button(circle_value));
+    buttons2.set(Buttons2::TRIANGLE, convert_analog_to_button(triangle_value));
     buttons2.set(Buttons2::R1, convert_analog_to_button(r1_button_value));
     buttons2.set(Buttons2::L1, convert_analog_to_button(l1_button_value));
     buttons2.set(Buttons2::R2, convert_analog_to_button(r2_button_value));
@@ -465,7 +465,7 @@ fn clear_serial_buffer<T: Read>(serial: &mut T) {
 fn send_to_ps2_controller_emulator(
     arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
-) -> Result<(), Box<std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     use serialport::prelude::*;
     use std::time::Duration;
 
@@ -510,7 +510,7 @@ fn send_to_ps2_controller_emulator_via<I: Read + Write>(
     arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
     mut serial: I,
-) -> Result<(), Box<std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_to_ps2_controller_emulator_via()");
     let verbose = arguments.verbose;
@@ -766,7 +766,7 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
     trigger_mode: &TriggerMode,
     normalise_sticks: bool,
     verbose: bool,
-) -> Result<Vec<u8>, Box<std::error::Error>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("send_event_to_controller()");
     let sent;
@@ -855,7 +855,7 @@ fn send_event_to_controller<I: Read + Write, T: GameController>(
 fn print_events(
     _arguments: &CLIArgs,
     sdl_manager: &mut SDLManager,
-) -> Result<(), Box<std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     let _guard = flame::start_guard("print_events()");
     println!("Printing all controller events...");
@@ -1381,7 +1381,7 @@ mod tests {
     }
 
     #[test]
-    fn send_event_to_controller_works() -> Result<(), Box<std::error::Error>> {
+    fn send_event_to_controller_works() -> Result<(), Box<dyn std::error::Error>> {
         use self::mockstream::SharedMockStream;
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
