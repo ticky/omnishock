@@ -80,7 +80,7 @@ pub struct SDLManager {
     pub context: sdl2::Sdl,
     pub video_subsystem: Option<sdl2::VideoSubsystem>,
     pub game_controller_subsystem: sdl2::GameControllerSubsystem,
-    pub active_controllers: HashMap<i32, ControllerManager>,
+    pub active_controllers: HashMap<u32, ControllerManager>,
 }
 
 impl SDLManager {
@@ -115,7 +115,7 @@ impl SDLManager {
         };
 
         // Keep track of the controllers we know of
-        let active_controllers: HashMap<i32, ControllerManager> = HashMap::new();
+        let active_controllers: HashMap<u32, ControllerManager> = HashMap::new();
 
         let mut sdl_manager = SDLManager {
             context,
@@ -178,7 +178,7 @@ impl SDLManager {
         }
     }
 
-    fn insert_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
+    fn insert_controller(&mut self, index: u32) -> Result<u32, sdl2::IntegerOrSdlError> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#insert_controller()");
         let controller = self.game_controller_subsystem.open(index)?;
@@ -191,7 +191,7 @@ impl SDLManager {
         Ok(controller_id)
     }
 
-    pub fn add_controller(&mut self, index: u32) -> Result<i32, sdl2::IntegerOrSdlError> {
+    pub fn add_controller(&mut self, index: u32) -> Result<u32, sdl2::IntegerOrSdlError> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#add_controller()");
         let controller = self.game_controller_subsystem.open(index)?;
@@ -221,7 +221,7 @@ impl SDLManager {
             .contains_key(&controller.instance_id()))
     }
 
-    pub fn remove_controller(&mut self, id: i32) -> Option<ControllerManager> {
+    pub fn remove_controller(&mut self, id: u32) -> Option<ControllerManager> {
         #[cfg(feature = "flamegraph-profiling")]
         let _guard = flame::start_guard("SDLManager#remove_controller()");
         match self.active_controllers.remove(&id) {
