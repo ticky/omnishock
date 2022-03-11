@@ -32,8 +32,8 @@ use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
 use std::str::FromStr;
-extern crate structopt;
-use structopt::StructOpt;
+extern crate clap;
+use clap::Parser;
 
 #[cfg(feature = "flamegraph-profiling")]
 extern crate flame;
@@ -102,39 +102,37 @@ bitflags! {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt()]
+#[derive(Parser, Debug)]
+#[clap()]
 struct CLIArgs {
     /// Print more information about activity
-    #[structopt(short, long)]
+    #[clap(short, long)]
     verbose: bool,
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     subcommand: Subcommands,
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Parser, Debug)]
 enum Subcommands {
     /// Start a transliteration session using a PS2 Controller Emulator over Serial
-    #[structopt(name = "ps2ce")]
+    #[clap(name = "ps2ce")]
     PS2CESubcommand(PS2CESubcommand),
     /// Tests the game controller subsystem
-    #[structopt(name = "test")]
+    #[clap(name = "test")]
     Test,
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(rename_all = "kebab-case")]
+#[derive(Parser, Debug)]
+#[clap(rename_all = "kebab-case")]
 struct PS2CESubcommand {
     // Serial port name hint is different per-OS
-    #[structopt(raw(help = "SERIAL_HINT"))]
+    #[clap(help = SERIAL_HINT)]
     device: String,
 
     /// How to map the analog triggers
-    #[structopt(
-        raw(
-            possible_values = "&TriggerMode::variants()",
-            case_insensitive = "true"
-        ),
+    #[clap(
+        possible_values = TriggerMode::variants(),
+        ignore_case = true,
         long,
         short,
         default_value = "normal"
@@ -146,7 +144,7 @@ struct PS2CESubcommand {
     /// outer deadzone exhibited by real DualShock 2 controllers. This option
     /// removes this compensation. May be useful if you're using another
     /// older-style analog controller.
-    #[structopt(long, short)]
+    #[clap(long, short)]
     no_stick_normalise: bool,
 }
 
@@ -180,7 +178,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "flamegraph-profiling")]
     flame::start("Parse Arguments");
 
-    let arguments = CLIArgs::from_args();
+    let arguments = CLIArgs::parse();
 
     #[cfg(feature = "flamegraph-profiling")]
     flame::end("Parse Arguments");
