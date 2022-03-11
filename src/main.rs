@@ -103,7 +103,7 @@ bitflags! {
 }
 
 #[derive(Parser, Debug)]
-#[clap()]
+#[clap(version)]
 struct CLIArgs {
     /// Print more information about activity
     #[clap(short, long)]
