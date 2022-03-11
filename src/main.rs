@@ -20,19 +20,14 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate game_time;
-extern crate hex_view;
+
 use hex_view::HexView;
-extern crate num;
-extern crate sdl2;
-extern crate serialport;
-extern crate spin_sleep;
 use std::cmp::{PartialEq, PartialOrd};
 use std::convert::From;
 use std::io::prelude::{Read, Write};
 use std::ops::{Add, Div, Neg};
 use std::str::FromStr;
-extern crate clap;
+
 use clap::Parser;
 
 #[cfg(feature = "flamegraph-profiling")]
@@ -1018,17 +1013,16 @@ mod tests {
     fn convert_analog_to_button_is_accurate() {
         use super::convert_analog_to_button;
 
-        assert_eq!(convert_analog_to_button(127u8), false);
-        assert_eq!(convert_analog_to_button(128u8), true);
+        assert!(!convert_analog_to_button(127u8));
+        assert!(convert_analog_to_button(128u8));
 
-        assert_eq!(convert_analog_to_button(u8::max_value()), true);
-        assert_eq!(convert_analog_to_button(i64::max_value()), true);
-        assert_eq!(convert_analog_to_button(u8::min_value()), false);
-        assert_eq!(convert_analog_to_button(i64::min_value()), false);
+        assert!(convert_analog_to_button(u8::max_value()));
+        assert!(convert_analog_to_button(i64::max_value()));
+        assert!(!convert_analog_to_button(u8::min_value()));
+        assert!(!convert_analog_to_button(i64::min_value()));
     }
 
-    use sdl2;
-    use sdl_manager::GameController;
+    use crate::sdl_manager::GameController;
     use std::collections::HashMap;
 
     struct FauxController {
@@ -1084,8 +1078,8 @@ mod tests {
     fn controller_map_twenty_byte_works() {
         use super::controller_map_twenty_byte;
         use super::{Buttons1, Buttons2, TriggerMode};
+        use crate::DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
-        use DUALSHOCK_MAGIC;
 
         let mut controller =
             FauxController::create_with_name(String::from("Applejack Game-player Pad"));
@@ -1278,8 +1272,8 @@ mod tests {
     fn controller_map_seven_byte_works() {
         use super::controller_map_seven_byte;
         use super::{Buttons1, Buttons2, TriggerMode};
+        use crate::DUALSHOCK_MAGIC;
         use sdl2::controller::{Axis, Button};
-        use DUALSHOCK_MAGIC;
 
         let mut controller =
             FauxController::create_with_name(String::from("Apple Pippin Controller"));
@@ -1384,9 +1378,9 @@ mod tests {
         use super::send_event_to_controller;
         use super::ControllerEmulatorPacketType;
         use super::{Buttons1, Buttons2, TriggerMode};
-        use DUALSHOCK_MAGIC;
-        use SEVEN_BYTE_OK_RESPONSE;
-        use TWENTY_BYTE_OK_HEADER;
+        use crate::DUALSHOCK_MAGIC;
+        use crate::SEVEN_BYTE_OK_RESPONSE;
+        use crate::TWENTY_BYTE_OK_HEADER;
 
         let controller = FauxController::create_with_name(String::from("Apple Pippin Controller"));
 

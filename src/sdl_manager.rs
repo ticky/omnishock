@@ -18,11 +18,7 @@
  * along with Omnishock.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-extern crate sdl2;
 use std::collections::HashMap;
-
-#[cfg(feature = "flamegraph-profiling")]
-extern crate flame;
 
 // SDL Manager
 // Structure for passing around access to the SDL Subsystems,
